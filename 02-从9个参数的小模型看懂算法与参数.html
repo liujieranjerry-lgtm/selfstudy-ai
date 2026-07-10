@@ -45,7 +45,7 @@
 <p>第一层：</p>
 <div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>z</mi><mo>&#x0003D;</mo><msub><mi>W</mi><mn>1</mn></msub><mi>x</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>1</mn></msub></mrow></math></div>
 
-<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>h</mi><mo>&#x0003D;</mo><mo>ReLU</mo><mo stretchy="false">&#x00028;</mo><mi>z</mi><mo stretchy="false">&#x00029;</mo></mrow></math></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>h</mi><mo>&#x0003D;</mo><mrow><mi mathvariant="normal">R</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">L</mi><mi mathvariant="normal">U</mi></mrow><mo stretchy="false">&#x00028;</mo><mi>z</mi><mo stretchy="false">&#x00029;</mo></mrow></math></div>
 
 <p>第二层：</p>
 <div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mo>&#x0003D;</mo><msub><mi>W</mi><mn>2</mn></msub><mi>h</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>2</mn></msub></mrow></math></div>
@@ -172,7 +172,7 @@
 <h3 id="1">1. 前向传播算法</h3>
 <p>规定输入怎样经过一层层矩阵、偏置和激活函数，最终产生预测。</p>
 <p>当前模型的前向传播是：</p>
-<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>x</mi><mo>&#x02192;</mo><msub><mi>W</mi><mn>1</mn></msub><mi>x</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>1</mn></msub><mo>&#x02192;</mo><mo>ReLU</mo><mo>&#x02192;</mo><msub><mi>W</mi><mn>2</mn></msub><mi>h</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>2</mn></msub><mo>&#x02192;</mo><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover></mrow></math></div>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>x</mi><mo>&#x02192;</mo><msub><mi>W</mi><mn>1</mn></msub><mi>x</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>1</mn></msub><mo>&#x02192;</mo><mrow><mi mathvariant="normal">R</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">L</mi><mi mathvariant="normal">U</mi></mrow><mo>&#x02192;</mo><msub><mi>W</mi><mn>2</mn></msub><mi>h</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>2</mn></msub><mo>&#x02192;</mo><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover></mrow></math></div>
 
 <h3 id="2">2. 训练算法</h3>
 <p>规定模型答错以后怎样学习：</p>
