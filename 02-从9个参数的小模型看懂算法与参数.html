@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>02 — 从 9 个参数的小模型，看懂什么是算法、什么是参数</title>
+  <link rel="stylesheet" href="assets/lesson.css">
+</head>
+<body>
+<main>
+  <nav class="document-nav" aria-label="文档导航">
+    <a href="01-从文本到token再到向量.md">上一篇 Markdown</a>
+    <a href="02-从9个参数的小模型看懂算法与参数.md">查看源 Markdown</a>
+  </nav>
+<h1 id="02-9">02 — 从 9 个参数的小模型，看懂什么是算法、什么是参数</h1>
+<blockquote>
+<p>本文是 selfstudy-ai 自学笔记的第 2 篇。<br>
+目标：不靠抽象定义，只用一个能手算完的小模型，看清算法、参数、反向传播、梯度下降和学习率分别负责什么。</p>
+<p>公式兼容说明：标准 Markdown 不保证渲染 LaTeX 数学公式。如当前查看器显示异常，请打开<a href="./02-从9个参数的小模型看懂算法与参数.html">公式兼容版 HTML</a>。</p>
+</blockquote>
+<hr>
+<h2 id="_1">一、先记住一句话</h2>
+<blockquote>
+<p><strong>算法规定“怎么算”，参数提供“拿什么数字算”。</strong></p>
+</blockquote>
+<p>可以把一个模型压缩成下面这个公式：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mo>&#x0003D;</mo><mi>f</mi><mo stretchy="false">&#x00028;</mo><mi>x</mi><mi>;</mi><mi>&#x003B8;</mi><mo stretchy="false">&#x00029;</mo></mrow></math></div>
+
+<ul>
+<li><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>x</mi></mrow></math></span> 是输入</li>
+<li><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>f</mi></mrow></math></span> 是计算结构和步骤</li>
+<li><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>&#x003B8;</mi></mrow></math></span> 是参与计算的全部可学习参数</li>
+<li><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover></mrow></math></span> 是模型算出的结果</li>
+</ul>
+<p>这里最重要的是分号两边：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>f</mi><mo stretchy="false">&#x00028;</mo><mi>x</mi><mi>;</mi><mi>&#x003B8;</mi><mo stretchy="false">&#x00029;</mo></mrow></math></div>
+
+<p><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>f</mi></mrow></math></span> 决定计算流程；<span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>&#x003B8;</mi></mrow></math></span> 决定这个流程当前会表现出什么行为。</p>
+<p>接下来，我们用同一个例子把它展开。</p>
+<hr>
+<h2 id="9">二、先搭一台只有 9 个参数的小机器</h2>
+<p>输入是一个二维向量：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>x</mi><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>2</mn></mtd></mtr><mtr><mtd><mn>1</mn></mtd></mtr></mtable><mo>&#x0005D;</mo></mrow></math></div>
+
+<p>这个模型有两层。</p>
+<p>第一层：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>z</mi><mo>&#x0003D;</mo><msub><mi>W</mi><mn>1</mn></msub><mi>x</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>1</mn></msub></mrow></math></div>
+
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>h</mi><mo>&#x0003D;</mo><mo>ReLU</mo><mo stretchy="false">&#x00028;</mo><mi>z</mi><mo stretchy="false">&#x00029;</mo></mrow></math></div>
+
+<p>第二层：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mo>&#x0003D;</mo><msub><mi>W</mi><mn>2</mn></msub><mi>h</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>2</mn></msub></mrow></math></div>
+
+<p>当前使用的数字是：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>W</mi><mn>1</mn></msub><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>0.5</mn></mtd><mtd><mo>&#x02212;</mo><mn>0.5</mn></mtd></mtr><mtr><mtd><mn>1</mn></mtd><mtd><mn>0.5</mn></mtd></mtr></mtable><mo>&#x0005D;</mo><mo>&#x0002C;</mo><mspace width="2em" /><msub><mi>b</mi><mn>1</mn></msub><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd></mtr></mtable><mo>&#x0005D;</mo></mrow></math></div>
+
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>W</mi><mn>2</mn></msub><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>0.2</mn></mtd><mtd><mn>0.8</mn></mtd></mtr></mtable><mo>&#x0005D;</mo><mo>&#x0002C;</mo><mspace width="2em" /><msub><mi>b</mi><mn>2</mn></msub><mo>&#x0003D;</mo><mn>0.1</mn></mrow></math></div>
+
+<p>先数一数：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th style="text-align: right;">包含多少个数字</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mn>1</mn></msub></mrow></math></span></td>
+<td style="text-align: right;">4</td>
+</tr>
+<tr>
+<td><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>b</mi><mn>1</mn></msub></mrow></math></span></td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr>
+<td><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mn>2</mn></msub></mrow></math></span></td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr>
+<td><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>b</mi><mn>2</mn></msub></mrow></math></span></td>
+<td style="text-align: right;">1</td>
+</tr>
+<tr>
+<td>合计</td>
+<td style="text-align: right;"><strong>9</strong></td>
+</tr>
+</tbody>
+</table>
+<p>所以，这是一个只有 <strong>9 个参数</strong> 的模型。</p>
+<p>注意，9 个参数不是 9 层，也不是 9 个矩阵。它的意思只是：模型里一共有 9 个能够通过训练改变的数字。</p>
+<hr>
+<h2 id="_2">三、什么是参数：矩阵里那些会被训练修改的数字</h2>
+<p>在这个模型里，下面这些数都是参数：</p>
+<pre><code class="language-text">0.5、-0.5、1、0.5、0、0、0.2、0.8、0.1
+</code></pre>
+<p>训练开始前，它们会被初始化为某些数值。训练过程中，模型根据误差不断修改它们。训练结束后，真正被保存下来的主要就是这些参数。</p>
+<p>参数可以理解成一个巨大公式里的“系数”。</p>
+<p>例如：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>y</mi><mo>&#x0003D;</mo><mi>a</mi><mi>x</mi><mo>&#x0002B;</mo><mi>b</mi></mrow></math></div>
+
+<p>公式结构没有变化，但 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>a</mi></mrow></math></span> 和 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi></mrow></math></span> 不同，函数行为就不同：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>y</mi><mo>&#x0003D;</mo><mn>2</mn><mi>x</mi><mo>&#x0002B;</mo><mn>1</mn></mrow></math></div>
+
+<p>和：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>y</mi><mo>&#x0003D;</mo><mo>&#x02212;</mo><mn>3</mn><mi>x</mi><mo>&#x0002B;</mo><mn>10</mn></mrow></math></div>
+
+<p>使用的是同一种计算结构，却会得到完全不同的结果。</p>
+<p>神经网络也是一样，只不过把 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>a</mi><mi>、</mi><mi>b</mi></mrow></math></span> 换成了大量矩阵和向量中的数字。</p>
+<h3 id="_3">哪些东西不是参数</h3>
+<p>在当前例子里：</p>
+<table>
+<thead>
+<tr>
+<th>数值</th>
+<th>是不是参数</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>输入 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>x</mi></mrow></math></span></td>
+<td>不是</td>
+<td>每个样本都可能不同</td>
+</tr>
+<tr>
+<td>中间结果 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>z</mi><mi>、</mi><mi>h</mi></mrow></math></span></td>
+<td>不是</td>
+<td>它们是本次计算临时产生的</td>
+</tr>
+<tr>
+<td>预测值 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover></mrow></math></span></td>
+<td>不是</td>
+<td>它是模型输出</td>
+</tr>
+<tr>
+<td>损失 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>L</mi></mrow></math></span></td>
+<td>不是</td>
+<td>它用来衡量错误大小</td>
+</tr>
+<tr>
+<td>学习率 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>&#x003B7;</mi></mrow></math></span></td>
+<td>不是模型参数</td>
+<td>它是人为设定的超参数</td>
+</tr>
+<tr>
+<td><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mn>1</mn></msub><mi>、</mi><msub><mi>b</mi><mn>1</mn></msub><mi>、</mi><msub><mi>W</mi><mn>2</mn></msub><mi>、</mi><msub><mi>b</mi><mn>2</mn></msub></mrow></math></span></td>
+<td>是</td>
+<td>它们会通过训练被修改并保存</td>
+</tr>
+</tbody>
+</table>
+<p>因此，“参数”有两个关键特征：</p>
+<ol>
+<li>它参与模型的计算。</li>
+<li>它会根据训练数据被自动调整。</li>
+</ol>
+<hr>
+<h2 id="_4">四、什么是算法：规定先算什么、后算什么</h2>
+<p>现在暂时遮住所有具体数字，只看步骤：</p>
+<pre><code class="language-text">输入 x
+  ↓
+计算 W₁x + b₁
+  ↓
+经过 ReLU
+  ↓
+计算 W₂h + b₂
+  ↓
+得到预测值
+</code></pre>
+<p>这一套计算顺序和规则，就是算法的一部分。</p>
+<p>在日常 AI 讨论中，人们经常把模型结构和处理流程一起笼统地叫作“算法”。更严格地说，可以把它分成三部分：</p>
+<h3 id="1">1. 前向传播算法</h3>
+<p>规定输入怎样经过一层层矩阵、偏置和激活函数，最终产生预测。</p>
+<p>当前模型的前向传播是：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>x</mi><mo>&#x02192;</mo><msub><mi>W</mi><mn>1</mn></msub><mi>x</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>1</mn></msub><mo>&#x02192;</mo><mo>ReLU</mo><mo>&#x02192;</mo><msub><mi>W</mi><mn>2</mn></msub><mi>h</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>2</mn></msub><mo>&#x02192;</mo><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover></mrow></math></div>
+
+<h3 id="2">2. 训练算法</h3>
+<p>规定模型答错以后怎样学习：</p>
+<pre><code class="language-text">计算损失
+  ↓
+反向传播计算梯度
+  ↓
+优化器读取梯度
+  ↓
+根据学习率更新参数
+</code></pre>
+<h3 id="3">3. 推理或生成算法</h3>
+<p>模型训练完成后，规定怎样使用已经学好的参数产生结果。大语言模型还会涉及 token 选择、采样和停止条件。</p>
+<p>所以，“算法就是很多层矩阵组合”这个理解已经抓到了神经网络的主体，但还差两块：</p>
+<ul>
+<li>矩阵之间还会穿插 ReLU、Attention、归一化等非线性或结构性操作。</li>
+<li>训练时还需要损失函数、反向传播和参数更新规则。</li>
+</ul>
+<p>更完整的说法是：</p>
+<blockquote>
+<p><strong>神经网络是一个由矩阵运算和其他操作组成的巨大参数化公式；算法规定公式怎样运行，参数是公式里会通过训练改变的数字。</strong></p>
+</blockquote>
+<hr>
+<h2 id="_5">五、让算法真正运行一次</h2>
+<p>第一层先计算：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>z</mi><mo>&#x0003D;</mo><msub><mi>W</mi><mn>1</mn></msub><mi>x</mi><mo>&#x0002B;</mo><msub><mi>b</mi><mn>1</mn></msub></mrow></math></div>
+
+<p>代入数字：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>z</mi><mn>1</mn></msub><mo>&#x0003D;</mo><mn>0.5</mn><mo>&#x000D7;</mo><mn>2</mn><mo>&#x0002B;</mo><mo stretchy="false">&#x00028;</mo><mo>&#x02212;</mo><mn>0.5</mn><mo stretchy="false">&#x00029;</mo><mo>&#x000D7;</mo><mn>1</mn><mo>&#x0002B;</mo><mn>0</mn><mo>&#x0003D;</mo><mn>0.5</mn></mrow></math></div>
+
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>z</mi><mn>2</mn></msub><mo>&#x0003D;</mo><mn>1</mn><mo>&#x000D7;</mo><mn>2</mn><mo>&#x0002B;</mo><mn>0.5</mn><mo>&#x000D7;</mo><mn>1</mn><mo>&#x0002B;</mo><mn>0</mn><mo>&#x0003D;</mo><mn>2.5</mn></mrow></math></div>
+
+<p>所以：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>z</mi><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>0.5</mn></mtd></mtr><mtr><mtd><mn>2.5</mn></mtd></mtr></mtable><mo>&#x0005D;</mo></mrow></math></div>
+
+<p>ReLU 的规则是：正数保持不变，负数变成 0。当前两个数都是正数，因此：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>h</mi><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>0.5</mn></mtd></mtr><mtr><mtd><mn>2.5</mn></mtd></mtr></mtable><mo>&#x0005D;</mo></mrow></math></div>
+
+<p>第二层继续计算：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mo>&#x0003D;</mo><mn>0.2</mn><mo>&#x000D7;</mo><mn>0.5</mn><mo>&#x0002B;</mo><mn>0.8</mn><mo>&#x000D7;</mo><mn>2.5</mn><mo>&#x0002B;</mo><mn>0.1</mn></mrow></math></div>
+
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mo>&#x0003D;</mo><mn>0.1</mn><mo>&#x0002B;</mo><mn>2</mn><mo>&#x0002B;</mo><mn>0.1</mn><mo>&#x0003D;</mo><mn>2.2</mn></mrow></math></div>
+
+<p>这一次前向传播里：</p>
+<ul>
+<li>“先乘哪个矩阵、再经过什么操作”由算法决定。</li>
+<li>“矩阵里面具体是 0.2 还是 0.8”由参数决定。</li>
+<li>计算机真正完成这些乘法和加法，需要算力。</li>
+</ul>
+<hr>
+<h2 id="_6">六、同一个算法，换一组参数会发生什么</h2>
+<p>假设算法完全不变，输入也还是：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>x</mi><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>2</mn></mtd></mtr><mtr><mtd><mn>1</mn></mtd></mtr></mtable><mo>&#x0005D;</mo></mrow></math></div>
+
+<p>我们只把第二层参数换成：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>W</mi><mn>2</mn></msub><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>0.4</mn></mtd><mtd><mn>0.6</mn></mtd></mtr></mtable><mo>&#x0005D;</mo><mo>&#x0002C;</mo><mspace width="2em" /><msub><mi>b</mi><mn>2</mn></msub><mo>&#x0003D;</mo><mn>0.1</mn></mrow></math></div>
+
+<p>中间结果仍然是：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>h</mi><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>0.5</mn></mtd></mtr><mtr><mtd><mn>2.5</mn></mtd></mtr></mtable><mo>&#x0005D;</mo></mrow></math></div>
+
+<p>但最终输出变成：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mo>&#x0003D;</mo><mn>0.4</mn><mo>&#x000D7;</mo><mn>0.5</mn><mo>&#x0002B;</mo><mn>0.6</mn><mo>&#x000D7;</mo><mn>2.5</mn><mo>&#x0002B;</mo><mn>0.1</mn><mo>&#x0003D;</mo><mn>1.8</mn></mrow></math></div>
+
+<p>算法没有变化，参数变化了，结果就从 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2.2</mn></mrow></math></span> 变成了 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1.8</mn></mrow></math></span>。</p>
+<p>这就是算法和参数最清楚的分界：</p>
+<blockquote>
+<p><strong>算法像固定的计算路线；参数像路线中每一个路口当前设置的数值。</strong></p>
+</blockquote>
+<hr>
+<h2 id="_7">七、参数是怎样“学会”的</h2>
+<p>假设正确答案是：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>y</mi><mo>&#x0003D;</mo><mn>3</mn></mrow></math></div>
+
+<p>模型当前预测：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mo>&#x0003D;</mo><mn>2.2</mn></mrow></math></div>
+
+<p>使用平方损失：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>L</mi><mo>&#x0003D;</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><mo stretchy="false">&#x00028;</mo><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mo>&#x02212;</mo><mi>y</mi><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup></mrow></math></div>
+
+<p>得到：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>L</mi><mo>&#x0003D;</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><mo stretchy="false">&#x00028;</mo><mn>2.2</mn><mo>&#x02212;</mo><mn>3</mn><msup><mo stretchy="false">&#x00029;</mo><mn>2</mn></msup><mo>&#x0003D;</mo><mn>0.32</mn></mrow></math></div>
+
+<p>损失 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>L</mi></mrow></math></span> 告诉我们模型错了多少，但它没有直接告诉每个参数应该怎样修改。这一步由反向传播完成。</p>
+<h3 id="_8">反向传播：计算每个参数对错误的影响</h3>
+<p>先计算损失对预测值的偏导：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mfrac><mrow><mo>&#x02202;</mo><mi>L</mi></mrow><mrow><mo>&#x02202;</mo><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover></mrow></mfrac><mo>&#x0003D;</mo><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mo>&#x02212;</mo><mi>y</mi><mo>&#x0003D;</mo><mo>&#x02212;</mo><mn>0.8</mn></mrow></math></div>
+
+<p>对于第二层第一个权重 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mrow><mn>2</mn><mo>&#x0002C;</mo><mn>1</mn></mrow></msub></mrow></math></span>：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>W</mi><mrow><mn>2</mn><mo>&#x0002C;</mo><mn>1</mn></mrow></msub><mo>&#x02192;</mo><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mo>&#x02192;</mo><mi>L</mi></mrow></math></div>
+
+<p>链式法则给出：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mfrac><mrow><mo>&#x02202;</mo><mi>L</mi></mrow><mrow><mo>&#x02202;</mo><msub><mi>W</mi><mrow><mn>2</mn><mo>&#x0002C;</mo><mn>1</mn></mrow></msub></mrow></mfrac><mo>&#x0003D;</mo><mfrac><mrow><mo>&#x02202;</mo><mi>L</mi></mrow><mrow><mo>&#x02202;</mo><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover></mrow></mfrac><mfrac><mrow><mo>&#x02202;</mo><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover></mrow><mrow><mo>&#x02202;</mo><msub><mi>W</mi><mrow><mn>2</mn><mo>&#x0002C;</mo><mn>1</mn></mrow></msub></mrow></mfrac></mrow></math></div>
+
+<p>因为：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mfrac><mrow><mo>&#x02202;</mo><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover></mrow><mrow><mo>&#x02202;</mo><msub><mi>W</mi><mrow><mn>2</mn><mo>&#x0002C;</mo><mn>1</mn></mrow></msub></mrow></mfrac><mo>&#x0003D;</mo><msub><mi>h</mi><mn>1</mn></msub><mo>&#x0003D;</mo><mn>0.5</mn></mrow></math></div>
+
+<p>所以：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mfrac><mrow><mo>&#x02202;</mo><mi>L</mi></mrow><mrow><mo>&#x02202;</mo><msub><mi>W</mi><mrow><mn>2</mn><mo>&#x0002C;</mo><mn>1</mn></mrow></msub></mrow></mfrac><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mo>&#x02212;</mo><mn>0.8</mn><mo stretchy="false">&#x00029;</mo><mo>&#x000D7;</mo><mn>0.5</mn><mo>&#x0003D;</mo><mo>&#x02212;</mo><mn>0.4</mn></mrow></math></div>
+
+<p>同理：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mfrac><mrow><mo>&#x02202;</mo><mi>L</mi></mrow><mrow><mo>&#x02202;</mo><msub><mi>W</mi><mrow><mn>2</mn><mo>&#x0002C;</mo><mn>2</mn></mrow></msub></mrow></mfrac><mo>&#x0003D;</mo><mo stretchy="false">&#x00028;</mo><mo>&#x02212;</mo><mn>0.8</mn><mo stretchy="false">&#x00029;</mo><mo>&#x000D7;</mo><mn>2.5</mn><mo>&#x0003D;</mo><mo>&#x02212;</mo><mn>2.0</mn></mrow></math></div>
+
+<p>因此：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mfrac><mrow><mo>&#x02202;</mo><mi>L</mi></mrow><mrow><mo>&#x02202;</mo><msub><mi>W</mi><mn>2</mn></msub></mrow></mfrac><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mo>&#x02212;</mo><mn>0.4</mn></mtd><mtd><mo>&#x02212;</mo><mn>2.0</mn></mtd></mtr></mtable><mo>&#x0005D;</mo></mrow></math></div>
+
+<p>这一步只是在计算梯度，还没有修改参数。</p>
+<h3 id="_9">梯度下降：真正修改参数</h3>
+<p>人为设定学习率：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>&#x003B7;</mi><mo>&#x0003D;</mo><mn>0.1</mn></mrow></math></div>
+
+<p>更新规则是：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>参</mi><msub><mi>数</mi><mrow><mi>新</mi></mrow></msub><mo>&#x0003D;</mo><mi>参</mi><msub><mi>数</mi><mrow><mi>旧</mi></mrow></msub><mo>&#x02212;</mo><mi>学</mi><mi>习</mi><mi>率</mi><mo>&#x000D7;</mo><mi>梯</mi><mi>度</mi></mrow></math></div>
+
+<p>于是：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>W</mi><mn>2</mn><mrow><mi>新</mi></mrow></msubsup><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>0.2</mn></mtd><mtd><mn>0.8</mn></mtd></mtr></mtable><mo>&#x0005D;</mo><mo>&#x02212;</mo><mn>0.1</mn><mo>&#x0005B;</mo><mtable><mtr><mtd><mo>&#x02212;</mo><mn>0.4</mn></mtd><mtd><mo>&#x02212;</mo><mn>2.0</mn></mtd></mtr></mtable><mo>&#x0005D;</mo></mrow></math></div>
+
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>W</mi><mn>2</mn><mrow><mi>新</mi></mrow></msubsup><mo>&#x0003D;</mo><mo>&#x0005B;</mo><mtable><mtr><mtd><mn>0.24</mn></mtd><mtd><mn>1.0</mn></mtd></mtr></mtable><mo>&#x0005D;</mo></mrow></math></div>
+
+<p>偏置也更新为：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msubsup><mi>b</mi><mn>2</mn><mrow><mi>新</mi></mrow></msubsup><mo>&#x0003D;</mo><mn>0.1</mn><mo>&#x02212;</mo><mn>0.1</mn><mo>&#x000D7;</mo><mo stretchy="false">&#x00028;</mo><mo>&#x02212;</mo><mn>0.8</mn><mo stretchy="false">&#x00029;</mo><mo>&#x0003D;</mo><mn>0.18</mn></mrow></math></div>
+
+<p>如果为了便于观察，暂时只更新第二层，新预测就是：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msup><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mrow><mi>新</mi></mrow></msup><mo>&#x0003D;</mo><mn>0.24</mn><mo>&#x000D7;</mo><mn>0.5</mn><mo>&#x0002B;</mo><mn>1.0</mn><mo>&#x000D7;</mo><mn>2.5</mn><mo>&#x0002B;</mo><mn>0.18</mn><mo>&#x0003D;</mo><mn>2.8</mn></mrow></math></div>
+
+<p>预测从 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2.2</mn></mrow></math></span> 变成 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2.8</mn></mrow></math></span>，更接近正确答案 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>3</mn></mrow></math></span>。</p>
+<p>这里的职责必须分清：</p>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>负责什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>损失函数</td>
+<td>衡量模型错了多少</td>
+</tr>
+<tr>
+<td>反向传播</td>
+<td>计算每个参数的梯度</td>
+</tr>
+<tr>
+<td>梯度下降</td>
+<td>根据梯度修改参数</td>
+</tr>
+<tr>
+<td>学习率</td>
+<td>控制每次修改多少</td>
+</tr>
+</tbody>
+</table>
+<p>一句话概括：</p>
+<blockquote>
+<p><strong>反向传播算梯度，梯度下降使用梯度，学习率控制步长。</strong></p>
+</blockquote>
+<hr>
+<h2 id="_10">八、为什么训练会改变参数，却不改变算法</h2>
+<p>训练前和训练后，模型仍然按照同样的步骤计算：</p>
+<pre><code class="language-text">x → W₁x+b₁ → ReLU → W₂h+b₂ → 预测值
+</code></pre>
+<p>训练改变的是步骤中使用的 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>W</mi></mrow></math></span> 和 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi></mrow></math></span>，而不是这条计算路线本身。</p>
+<p>因此可以把训练理解成：</p>
+<pre><code class="language-text">算法保持不变
+    ↓
+拿训练数据反复运行算法
+    ↓
+根据错误计算梯度
+    ↓
+不断修改参数
+    ↓
+得到一组更合适的参数
+</code></pre>
+<p>当然，在研发模型时，人类也可能修改算法，例如：</p>
+<ul>
+<li>把 ReLU 换成其他激活函数</li>
+<li>增加或减少网络层数</li>
+<li>改变 Attention 结构</li>
+<li>更换损失函数或优化方法</li>
+</ul>
+<p>这些属于修改模型结构或训练算法，不是普通训练过程中的参数学习。</p>
+<hr>
+<h2 id="_11">九、参数、超参数和中间结果不要混在一起</h2>
+<p>三个词长得相似，但职责不同。</p>
+<h3 id="_12">参数</h3>
+<p>模型从数据中学到的数字，例如：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>W</mi><mn>1</mn></msub><mi>、</mi><msub><mi>b</mi><mn>1</mn></msub><mi>、</mi><msub><mi>W</mi><mn>2</mn></msub><mi>、</mi><msub><mi>b</mi><mn>2</mn></msub></mrow></math></div>
+
+<h3 id="_13">超参数</h3>
+<p>训练开始前由人或调参程序设定的规则，例如：</p>
+<ul>
+<li>学习率</li>
+<li>批量大小</li>
+<li>训练轮数</li>
+<li>网络层数</li>
+</ul>
+<p>超参数控制“模型怎样学”，但通常不是模型训练后保存的知识本身。</p>
+<h3 id="_14">中间结果</h3>
+<p>一次前向传播临时算出的数字，例如：</p>
+<div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>z</mi><mi>、</mi><mi>h</mi><mi>、</mi><mover accent="true"><mi>y</mi><mo>&#x0005E;</mo></mover><mi>、</mi><mi>L</mi></mrow></math></div>
+
+<p>它们会随输入变化，不是模型长期保存的参数。</p>
+<hr>
+<h2 id="_15">十、算力在这里扮演什么角色</h2>
+<p>算法和参数都不会自己运行。</p>
+<p>刚才的前向传播需要真的完成矩阵乘法、加法和 ReLU 判断；训练时还要完成反向传播和参数更新。计算机执行这些数字运算的能力，就是算力。</p>
+<p>所以三者可以这样区分：</p>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>回答的问题</th>
+<th>当前例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>算法</td>
+<td>按什么步骤计算？</td>
+<td>两层前向传播、损失、反向传播、更新规则</td>
+</tr>
+<tr>
+<td>参数</td>
+<td>计算时使用哪些可学习数字？</td>
+<td><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mn>1</mn></msub><mi>、</mi><msub><mi>b</mi><mn>1</mn></msub><mi>、</mi><msub><mi>W</mi><mn>2</mn></msub><mi>、</mi><msub><mi>b</mi><mn>2</mn></msub></mrow></math></span> 中的 9 个数字</td>
+</tr>
+<tr>
+<td>算力</td>
+<td>多快完成这些计算？</td>
+<td>CPU 或 GPU 执行乘法、加法和求导计算</td>
+</tr>
+</tbody>
+</table>
+<p>更强的 GPU 通常只会让同一个模型算得更快，不会自动让模型多出知识。模型学到的统计规律主要体现在参数之间的组合关系中。</p>
+<hr>
+<h2 id="_16">十一、把这个小模型放大到大语言模型</h2>
+<p>我们这个模型只有：</p>
+<ul>
+<li>2 个输入</li>
+<li>2 层计算</li>
+<li>9 个参数</li>
+</ul>
+<p>大语言模型则拥有：</p>
+<ul>
+<li>很长的 token 向量序列</li>
+<li>很多层 Transformer</li>
+<li>Attention、前馈网络、归一化等操作</li>
+<li>数十亿甚至更多参数</li>
+</ul>
+<p>但最核心的逻辑没有改变：</p>
+<pre><code class="language-text">输入数字
+  ↓
+按照算法执行大量矩阵和其他运算
+  ↓
+使用当前参数得到预测
+  ↓
+训练时计算损失和梯度
+  ↓
+更新参数
+</code></pre>
+<p>所以“70 亿参数模型”不是 70 亿层，也不是 70 亿个矩阵，而是模型所有可学习矩阵和向量中，总共有大约 70 亿个数字。</p>
+<p>这些参数并不是一条条独立保存的句子。模型学到的语言规律和知识，通常分散在大量参数的共同作用中。</p>
+<hr>
+<h2 id="_17">十二、关键概念速查表</h2>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>一句话解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>算法</td>
+<td>规定输入按照什么结构和步骤变成输出</td>
+</tr>
+<tr>
+<td>模型结构</td>
+<td>规定有哪些层、矩阵和连接关系，是算法的重要部分</td>
+</tr>
+<tr>
+<td>参数</td>
+<td>模型通过训练学到并保存的数字</td>
+</tr>
+<tr>
+<td>前向传播</td>
+<td>使用当前参数，从输入一路计算出预测</td>
+</tr>
+<tr>
+<td>损失函数</td>
+<td>衡量预测与正确答案相差多少</td>
+</tr>
+<tr>
+<td>梯度</td>
+<td>损失对某个参数的局部变化率</td>
+</tr>
+<tr>
+<td>反向传播</td>
+<td>沿计算图反向使用链式法则，高效计算全部梯度</td>
+</tr>
+<tr>
+<td>梯度下降</td>
+<td>根据梯度方向更新参数</td>
+</tr>
+<tr>
+<td>学习率</td>
+<td>人为设定的超参数，控制参数更新步长</td>
+</tr>
+<tr>
+<td>算力</td>
+<td>执行矩阵乘法、反向传播等计算的能力</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="_18">十三、三个自测题</h2>
+<h3 id="1-w2-0208-0406">1. 把 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>W</mi><mn>2</mn></msub></mrow></math></span> 从 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">[</mo><mn>0.2</mn><mo>&#x0002C;</mo><mn>0.8</mn><mo stretchy="false">]</mo></mrow></math></span> 换成 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">[</mo><mn>0.4</mn><mo>&#x0002C;</mo><mn>0.6</mn><mo stretchy="false">]</mo></mrow></math></span>，但计算步骤不变，改变的是什么？</h3>
+<details>
+<summary>查看答案</summary>
+
+改变的是参数，算法没有改变。
+
+</details>
+
+<h3 id="2-relu-w-b">2. 把 ReLU 换成另一个激活函数，但 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>W</mi></mrow></math></span> 和 <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>b</mi></mrow></math></span> 暂时不变，改变的是什么？</h3>
+<details>
+<summary>查看答案</summary>
+
+改变的是模型结构或算法，当前参数数值没有改变。
+
+</details>
+
+<h3 id="3-gpu">3. 换一张更强的 GPU，算法和参数会自动改变吗？</h3>
+<details>
+<summary>查看答案</summary>
+
+通常都不会。改变的是执行同一套计算的速度和可承载规模。
+
+</details>
+
+<hr>
+<h2 id="_19">十四、最后只保留这张图</h2>
+<pre><code class="language-text">                 人规定
+                    ↓
+输入 ──→ [算法：怎样计算] ──→ 预测
+              ↑
+        [参数：使用哪些数字]
+              ↑
+      训练数据通过误差不断调整
+
+算力：负责把上面所有计算真正执行出来
+</code></pre>
+<p>最简洁的总结是：</p>
+<blockquote>
+<p><strong>算法是机器的结构和运行规则；参数是机器内部通过训练调好的数字；训练就是在算法基本不变的情况下，不断寻找更合适的参数。</strong></p>
+</blockquote>
+<hr>
+<h2 id="_20">参考资料</h2>
+<ul>
+<li><a href="https://www.deeplearningbook.org/contents/mlp.html">Deep Learning, Chapter 6: Deep Feedforward Networks</a></li>
+<li><a href="https://cs231n.github.io/optimization-2/">Stanford CS231n: Backpropagation, Intuitions</a></li>
+</ul>
+<p>上一篇：<a href="./01-从文本到token再到向量.md">从文本到 Token，再到向量</a>。</p>
+</main>
+</body>
+</html>
