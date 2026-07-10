@@ -16,7 +16,6 @@
 <blockquote>
 <p>本文是 selfstudy-ai 自学笔记的第 2 篇。<br>
 目标：不靠抽象定义，只用一个能手算完的小模型，看清算法、参数、反向传播、梯度下降和学习率分别负责什么。</p>
-<p>公式兼容说明：标准 Markdown 不保证渲染 LaTeX 数学公式。如当前查看器显示异常，请打开<a href="./02-从9个参数的小模型看懂算法与参数.html">公式兼容版 HTML</a>。</p>
 </blockquote>
 <hr>
 <h2 id="_1">一、先记住一句话</h2>
@@ -35,7 +34,7 @@
 <p>这里最重要的是分号两边：</p>
 <div class="math-display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>f</mi><mo stretchy="false">&#x00028;</mo><mi>x</mi><mi>;</mi><mi>&#x003B8;</mi><mo stretchy="false">&#x00029;</mo></mrow></math></div>
 
-<p><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>f</mi></mrow></math></span> 决定计算流程；<span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>&#x003B8;</mi></mrow></math></span> 决定这个流程当前会表现出什么行为。</p>
+<p><span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>f</mi></mrow></math></span> 决定计算流程； <span class="math-inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>&#x003B8;</mi></mrow></math></span> 决定这个流程当前会表现出什么行为。</p>
 <p>接下来，我们用同一个例子把它展开。</p>
 <hr>
 <h2 id="9">二、先搭一台只有 9 个参数的小机器</h2>
