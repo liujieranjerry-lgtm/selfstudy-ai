@@ -1,13 +1,11 @@
-# 05 — Build An Agent From Scratch [1]：Harness 理论框架
+# 05 — Harness 理论框架
 
 > 本文是 selfstudy-ai 自学笔记的第 5 篇。<br>
 > 目标：理解 Agent Loop、Harness 的本质、核心机制与设计原则，为从零搭建 Agent 打好理论基础。
 
-> 原文：[Build An Agent From Scratch \[1\]：Harness 理论框架](https://www.tritium.work/2026/06/08/Build%20An%20Agent%20From%20Scratch%20%5B1%5D%EF%BC%9AHarness%20%E7%90%86%E8%AE%BA%E6%A1%86%E6%9E%B6/)
 
 > 这是「从零搭建 Agent」系列的第一篇。本系列的目标是像拼积木一样，以 Agent Loop 为核心，逐步添加模块，最终拼装出一套完善的 Agent 系统。第一篇专注理论：搞清楚 Agent 是什么、由哪些模块构成、以及 Harness 在其中扮演什么角色。
 
-同步项目地址 [https://github.com/Tritium0041/Singularity](https://github.com/Tritium0041/Singularity)
 
 
 ## 什么是 Agent？
