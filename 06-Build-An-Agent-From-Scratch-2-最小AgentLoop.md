@@ -1,14 +1,9 @@
 # 06 — Build An Agent From Scratch [2]：最小 Agent Loop
 
-> 本文是 selfstudy-ai 自学笔记的第 6 篇。<br>
+> 本文是 selfstudy-ai 自学笔记的第 6 篇。
 > 目标：看懂一个“最小但能跑起来”的 Agent 是由哪几块拼出来的：Agent Loop、LLM Client、Tool System，以及它们之间怎样通过消息历史互相配合。
-
-> 原文：[Build An Agent From Scratch \[2\]：最小 Agent Loop](https://www.tritium.work/2026/06/08/Build%20An%20Agent%20From%20Scratch%20%5B2%5D%EF%BC%9A%E6%9C%80%E5%B0%8F%20Agent%20Loop/)
-
+> 原文：[Build An Agent From Scratch [2]：最小 Agent Loop](https://www.tritium.work/2026/06/08/Build%20An%20Agent%20From%20Scratch%20%5B2%5D%EF%BC%9A%E6%9C%80%E5%B0%8F%20Agent%20Loop/)
 > 这是「从零搭建 Agent」系列的第二篇。上一篇先搭了理论骨架：Agent Loop 是心脏，Harness 是围绕这个循环做上下文工程和注意力管理的系统。从这一篇开始，我们把理论实践到代码里：先不做复杂的 Harness，只实现一个最小但能跑起来的 Agent Loop。
-
-同步项目地址 [https://github.com/Tritium0041/Singularity](https://github.com/Tritium0041/Singularity)，当前进度位于 [https://github.com/Tritium0041/Singularity/commit/223fa936b28f24c1b2d6629f924057d76b9f5926](https://github.com/Tritium0041/Singularity/commit/223fa936b28f24c1b2d6629f924057d76b9f5926)
-
 
 ## 阅读地图：先认识这一课的关键词
 
@@ -31,9 +26,7 @@
 
 > 通俗解释：这一课你不需要学会写代码。重点只抓四个动作：**模型说想用工具 → 程序执行工具 → 结果写回历史 → 模型再看一眼继续回答**。
 
-
 ---
-
 
 ## 这一节要实现什么？
 
@@ -80,7 +73,6 @@ User question
 
 > 通俗解释：普通聊天机器人像一个只能“动嘴”的人；Agent 像一个“既能动嘴、又能动手”的人。它说“我要用计算器”，宿主程序（真正负责运行工具、处理结果，并协调模型继续工作的主程序）真的去按计算器，再把屏幕上显示的答案念给它听，它再继续思考。
 
-
 ### 这一课最常用的概念，先拆开讲
 
 #### 1. Responses API、Chat Completions API、Anthropic API 有什么区别？
@@ -93,11 +85,11 @@ User question
 | Chat Completions API | OpenAI | 比较早的聊天接口 | 核心是“你给我一段对话历史，我还你一个回答”，状态要程序自己维护 |
 | Anthropic API（Messages API） | Anthropic（Claude） | Claude 的原生聊天接口 | 字段和 OpenAI 不同，例如用 `system`、`user`、`assistant` 消息，有自己的一套工具和流式格式 |
 
-**Responses API**：这是 OpenAI 比较新的接口，设计思路更像“给 Agent 用”，而不是单纯给聊天用。它会返回一个更完整的 `response` 对象，能表达推理内容、文本、工具调用、工具结果等多种信息；同时支持状态管理、工具调用、多模态和推理参数。程序不必自己拼一大堆历史记录，可以把更多状态交给 API 处理，因此它更适合做 Agent Loop 这类需要反复“模型思考 → 工具执行 → 结果回填”的场景。
+Chat Completions 是“一轮聊天的请求”：你把完整的 `messages` 数组传过去，模型返回一个 `choices` 里的 message，多轮对话状态完全由你自己维护；
 
-**Chat Completions API**：这是 OpenAI 比较早的聊天接口，核心模型就是“你给我一段对话历史，我还你一个回答”。程序需要自己维护整段历史，每次请求都把完整的 `messages` 列表发给模型，再从返回结果里挑出模型文字或工具调用。它简单直接，很多老系统、兼容层、第三方代理都用它，但在复杂 Agent 场景里，状态管理和工具链路都需要程序自己多操心。
+Anthropic 的 Messages API 思路与之相近，也是传 `system`/`user`/`assistant` 消息、用 content blocks 表达文本和工具调用，但协议格式、端点、流式事件都自成一派。
 
-**Anthropic API（Messages API）**：这是 Claude 的原生接口，来自 Anthropic。它和 OpenAI 的接口不是同一套格式：消息角色、请求字段、工具定义、流式事件都有自己的命名和结构。比如它用 `system`、`user`、`assistant` 这类消息，工具调用和流式事件也和 OpenAI 不一样。如果 Agent 想接入 Claude，不能把 OpenAI 的请求原样发过去，必须有一个新的 `LlmClient` 来翻译。
+Responses API 则把“状态”和“行动”内建进来：它返回带 id 的 typed items（reasoning、message、function_call 等），可以用 `store: true` 或 `previous_response_id` 保持跨轮推理状态，还自带 web search、file search、code interpreter、computer use、远程 MCP 等工具，在一个请求内完成多步智能体循环。
 
 > 通俗解释：它们都是“给模型打电话”的方式，但一个是新式总机，一个是老式总机，另一家是别家公司的总机。说的内容一样，填的表单和接线的地址不一样。Agent 想换哪一家，就得让 `LlmClient` 这个“翻译”去适应那家的格式。
 
@@ -142,7 +134,7 @@ LLM 只是 Agent 的“大脑”，它负责理解语言、做推理、决定下
 
 TypeScript 是一种编程语言，它是 JavaScript 的“升级版”：在 JavaScript 的基础上，增加了**类型说明**。
 
-类型的作用，是提前告诉程序“这里应该放文字、那里应该放数字、这个变量代表一种什么形状的对象”。这样写代码时更容易发现错误，也更容易让多人协作。
+类型说明的作用是提前告诉程序“这里应该放文字、那里应该放数字、这个变量代表一种什么形状的对象”。这样写代码时更容易发现错误，也更容易多人协作。
 
 > 通俗解释：JavaScript 像“普通便签”，什么都能往上写；TypeScript 像“带格子、带标签的表格”，每一格该填什么都写清楚。本文里那些 `LlmClient`、`AgentTool` 之类的形状，就是用 TypeScript 写的“表格规范”。
 
@@ -154,11 +146,9 @@ TypeScript 是一种编程语言，它是 JavaScript 的“升级版”：在 Ja
 
 > 通俗解释：Agent 像一台自动售货机，hooks 是它身上的外接插口。售货机不用拆开重装，外部设备插上插口就能读到“正在出货”“出货完成”这类状态。
 
-
 ---
 
-
-## 同类 Agent 是怎么做的？
+## 1. Agent loop：同类 Agent 是怎么做的？
 
 在写我们自己的实现前，作者看了两个已经存在的 Agent 源码：Codex 和 Pi。它们代表了两个很好的参照系：
 
@@ -166,7 +156,6 @@ TypeScript 是一种编程语言，它是 JavaScript 的“升级版”：在 Ja
 - **Pi**：轻量级 TypeScript 实现，Agent Loop 非常显式，结构更简单。
 
 > 通俗解释：“生产级”意思是已经能放到真实产品里长期稳定运行；“runtime”可以理解成工具运行时的环境；“hooks”是给外部程序预留的“挂钩点”，允许在特定时刻插入自己的逻辑。
-
 
 ### Codex：生产级 turn loop
 
@@ -203,12 +192,11 @@ while (true) {
 
 **第一，工具结果必须回填给模型。** 工具调用和调用结果是 conversation history 的一部分。模型下一轮必须看到 observation，才能继续推理。
 
-**第二，工具错误也是上下文。** 在 `codex-rs/core/src/tools/parallel.rs` 里，非 fatal 的工具错误会被转换成失败的 function call output，而不是直接让整个 turn 崩掉。也就是说，`command failed`、`tool not found`、`permission denied` 这类信息都应该成为模型可见的 observation。
+**第二，工具错误也是上下文。** 在 `codex-rs/core/src/tools/parallel.rs` 里，非 fatal 的工具错误会被转换成失败的 function call output，而不是直接让整个 turn 崩掉。也就是说， `command failed`、`tool not found`、`permission denied` 这类信息都应该成为模型可见的 observation。
 
 **第三，并行执行和顺序回填要分开。** Codex 的工具 runtime 会根据工具是否支持 parallel 选择并行或串行，但输出仍然以稳定方式写回历史，避免模型看到的上下文顺序漂移。
 
 > 通俗解释：`fatal` 是“这个任务已经救不回来”的错误；`non-fatal` 是“这次没做成，但还可以继续尝试”的错误。好的 Agent 会把后者当成一个普通观察结果送给模型，让模型有机会自我修正，而不是直接崩溃。
-
 
 ### Pi：显式 Agent Loop
 
@@ -228,48 +216,105 @@ context messages
 
 **第一，工具执行策略可配置。** Pi 会检查全局 `toolExecution` 和每个工具自己的 `executionMode`。如果任一工具要求顺序执行，就走 sequential；否则可以 parallel。
 
-**第二，事件流是一等接口。** Pi 会发出 `agent_start`、`turn_start`、`message_start`、`tool_execution_start`、`tool_execution_end`、`agent_end` 这类事件。这样 CLI、TUI、Web UI、日志系统都可以订阅同一条 agent event stream。
-
-> 通俗解释：事件流就像广播电台。Agent 每做一步都会广播“我开始干活了”“我在调用工具了”“工具完成了”；任何界面都可以听这个广播，不需要改 Agent 本身的逻辑。
-
-拆开讲“全局”和“单个工具”：
-
-- `toolExecution` 是任务级的默认策略，可以理解成“这场任务里所有工具调用默认怎么执行”。
-- 每个工具自己的 `executionMode` 是“这个工具个人的偏好”，可以覆盖全局默认值。
-- 如果全局是 `parallel`，但某一次要调用的工具里有一个声明自己是 `sequential`，那么这一批工具就降级成顺序执行，不能并行。
-
-`sequential` 和 `parallel` 的区别：
+怎么理解？全局tool execution指的是整个任务层面所有工具的执行，检查这个任务里面所有工具默认自己是怎么执行的。而“每个工具自己的execution mode”指的就是后面提到的sequential和parallel。sequential的意思是“顺序的”，parallel的意思是“平行的，并行的“。区别如下：
 
 | 模式 | 执行方式 | 类似场景 |
 |---|---|---|
 | sequential | 一个一个执行，前一个结束才轮到后一个 | 排队做核酸，一个人没做完下一个人不能开始 |
 | parallel | 多个工具同时开始执行 | 同时让三个人分头去买菜，买完再汇总 |
 
-之所以“任一工具要求顺序就整体顺序”，是因为并行可能会造成依赖问题：如果工具 B 需要工具 A 的结果，而 B 提前跑，就会拿到不完整的信息。最安全的做法是：只要有一个工具说“我不能并行”，整批就乖乖排队。
+- 每个工具自己的 `executionMode` 是“这个工具个人的偏好”，可以覆盖全局默认值。
+- 如果全局是 `parallel`，但某一次要调用的工具里有一个声明自己是 `sequential`，那么这一批工具就降级成顺序执行，不能并行。
+
+**之所以“任一工具要求顺序就整体顺序”，是因为并行可能会造成依赖问题：如果工具 B 需要工具 A 的结果，而 B 提前跑，就会拿到不完整的信息。最安全的做法是：只要有一个工具说“我不能并行”，整批就乖乖排队。**
+
+**第二，事件流是一等接口。** Pi 会发出 `agent_start`、`turn_start`、`message_start`、`tool_execution_start`、`tool_execution_end`、`agent_end` 这类事件。这样 CLI、TUI、Web UI、日志系统都可以订阅同一条 agent event stream。
+
+> 通俗解释：事件流就像广播电台。Agent 每做一步都会广播“我开始干活了”“我在调用工具了”“工具完成了”；任何界面都可以听这个广播，不需要改 Agent 本身的逻辑。
 
 所以我们这一版的实现策略很明确：
 
-- 学 Codex 的调用逻辑：工具结果回填、工具错误回填、并行执行但顺序写回。
-- 学 Pi 的形态：显式 TypeScript loop、清晰的 LLM 边界、事件驱动。
-- 暂时不做复杂 Harness。
+- **学 Codex 的调用逻辑：工具结果回填、工具错误回填、并行执行但顺序写回。**
+- **学 Pi 的形态：显式 TypeScript loop、清晰的 LLM 边界、事件驱动。**
 
-拆开讲“显式 TypeScript loop”：
+这里要明晰几个名词，“显式 TypeScript loop”：
 
 “显式”的意思是：循环结构在代码里清清楚楚，你能直接看到 `while` 或 `for` 在反复执行“问模型、看工具调用、执行工具、写回历史”。它不靠隐藏魔法，不把循环藏在别的地方。
 
 “TypeScript loop”就是指这个循环是用 TypeScript 写的，并且借用了 TypeScript 的类型系统，把模型、工具、消息都定义成有清晰形状的对象。
 
-拆开讲“LLM 边界清晰”：
+“LLM 边界清晰”：
 
-边界是指“Agent 自己的逻辑”和“模型供应商的细节”之间有一道清楚的分界线。Agent Loop 只使用统一的 `complete()` / `stream()` 和统一的 `AssistantMessage`，不直接处理 OpenAI 的字段、Anthropic 的字段、流式事件的细节。所有供应商特有的翻译都收在 `LlmClient` 里。
+边界是指“Agent 自己的逻辑”和“模型供应商的细节”之间有一道清楚的分界线。Agent Loop 只使用统一的 `complete()` 非流式输出/ `stream()` 流式输出和统一的 `AssistantMessage`，不直接处理 OpenAI 的字段、Anthropic 的字段、流式事件的细节。所有供应商特有的翻译都收在 `LlmClient` 里。
 
-> 通俗解释：Agent Loop 是“老板”，只负责安排流程；`LlmClient` 是“翻译秘书”，负责把老板的话翻译成不同公司的格式。老板不需要懂每家公司的方言，这就是边界清晰。
+这里我们可以理解为两种厨子，complete的就是一锅出，一次性把菜全给你；stream则是先给你炒一个菜，然后再给你炒下一个菜。而这两个厨子其实都是agent loop的出餐方式。至于他们做什么，都是接收统一的“assistant message”。这个assistant message是由LLmClient把不同供应商的字段和细节都翻译好的。防止厨子（agent loop）听不懂。
 
+## Agent Loop 核心代码
+
+当前最小循环在 `src/agent/agent-loop.ts` 的 `runInternal` 里。这段agent loop代码展示了如何串联将agent loop，LLm Client tool system三部分串联起来：
+
+```typescript
+private async runInternal(
+  input: string,
+  options: AgentRunOptions = {}
+): Promise<AgentRunResult> {
+  const maxTurns = options.maxTurns ?? this.maxTurns;
+  const userMessage: AgentMessage = { role: "user", content: input };
+  this.messages.push(userMessage);
+
+  let lastAssistant: AssistantMessage | undefined;
+
+  for (let turn = 1; turn <= maxTurns; turn += 1) {
+    const assistant = await this.completeAssistant(turn, {
+      model: this.model,
+      systemPrompt: this.systemPrompt,
+      messages: [...this.messages],
+      tools: this.tools.toLlmToolSpecs(),
+      reasoning: options.reasoning ?? this.reasoning,
+      signal: options.signal
+    });
+
+    lastAssistant = assistant;
+    this.messages.push(assistant);
+
+    const toolCalls = assistant.toolCalls ?? [];
+    if (toolCalls.length === 0) {
+      return this.buildResult(assistant.content, turn, "final");
+    }
+
+    const toolResults = await this.executeToolCalls(turn, toolCalls, options.signal);
+    this.messages.push(...toolResults);
+  }
+
+  return this.buildResult(lastAssistant?.content ?? "", maxTurns, "max_turns");
+}
+```
 
 ---
 
+拆解代码：
 
-## 我们的实现结构
+`runInternal` 是 Agent 循环的总入口：它先接收用户的 `input` 和本次运行的 `options`，用 `options.maxTurns ?? this.maxTurns` 确定最多能循环多少轮（如果本次设置了maxturns，也就是option.maxTurns，那就用，没有就用右边agent默认的this.maxTurns），然后把用户输入包成一条 `role: "user"` （一个给消息贴的角色标签，表示“这条消息是用户说的“，区别于模型说的 `assistant` 和工具返回的 `tool`）的 `userMessage`，通过 `this.messages.push(userMessage)` 写进当前任务的历史；<br>接着声明一个可能暂时为空的变量（`lastAssistant`），用来记住最近一次模型回答，因为程序可能在模型还没给出最终答案时被迫结束，所以要留一个位置保存最后拿到的内容。然后进入 `for (let turn = 1; turn <= maxTurns; turn += 1)` 这个循环（`turn` 是当前第几轮；从 1 开始，每跑完一轮加 1，直到超过 `maxTurns`）。<br>每一轮里，程序调用 `completeAssistant` （内部方法，负责“让模型完整地想一次并返回回答”，相当于循环里的一次 Think。）让模型思考一次，同时把 `systemPrompt`、当前完整历史（ `[...this.messages]`）、转换好的工具说明书 `this.tools.toLlmToolSpecs()`（工具说明书是把工具列表转换成模型能看懂的格式）推理强度 `reasoning` 和取消信号 `signal` 一起交给模型。<br>模型反馈后，程序把这次回答记入 `lastAssistant`，也通过 `this.messages.push(assistant)` 追加到历史里。接着读取 `assistant.toolCalls`，如果这次模型没有要求调用工具，也就是 `toolCalls.length === 0`，就说明模型已经给出最终答案，直接调用 `this.buildResult(assistant.content, turn, "final")` 返回结果并结束；如果模型确实要求调用工具，就调用 `executeToolCalls` 真正执行这些工具，再通过 `this.messages.push(...toolResults)` 把工具结果一条一条写回历史，然后进入下一轮循环，让模型看到刚刚的 observation 后继续推理。如果循环已经达到 `maxTurns` 但模型始终没有给出最终回答，程序就会走出循环，用 `lastAssistant?.content ?? ""` 兜底取出最后一次回答内容，并以 `"max_turns"` 状态调用 `buildResult` 强制结束。所以这段代码的本质就是：让模型想一次，如果它要工具就执行并把结果写回历史，再让它想一次，直到它给出最终答案或轮数用完。
+
+Agent Loop LLM Client Tool System三部分在代码中的体现如下：
+
+**Agent Loop**：就是这段代码本身。`for` 循环、`completeAssistant`、`executeToolCalls`、把结果 `push` 回历史，这些都是在执行“感知 → 思考 → 行动”的循环。
+
+**LLM Client**：通过 `completeAssistant` 参与。它真正负责调用 `LlmClient.complete()` 或 `LlmClient.stream()`，也就是把 `systemPrompt`、历史、工具列表翻译成模型 API 能认得的格式。这段代码没有直接写 OpenAI 字段，只是把请求交给了 LLM Client。
+
+**Tool System**：通过 `this.tools.toLlmToolSpecs()` 和 `executeToolCalls` 参与。前者把工具注册表里的工具转成模型能看懂的说明书，后者再根据模型发出的 `toolCalls` 去真正执行工具，并把结果写回历史
+
+这段代码也就是 Observe / Think / Act（aka reAct）的工程版本：
+
+| 理论概念 | 代码对应 |
+|---|---|
+| Observe | `messages` 里已有的 user、assistant、tool result |
+| Think | `completeAssistant(...)` 调用模型 |
+| Act | `executeToolCalls(...)` 执行模型请求的工具 |
+| Observe again | `this.messages.push(...toolResults)` 将工具结果写回历史 |
+| Stop | assistant 没有 tool call，或达到 maxTurns |
+
+### Agent loop保持最小规模
 
 当前项目的整体逻辑是：
 
@@ -286,11 +331,11 @@ User input
        continue next turn
 ```
 
-Agent 对象不关心 OpenAI Responses API 的具体 payload，也不关心工具函数内部怎么执行。它只负责整体循环。
+Agent Loop不关心 OpenAI Responses API 的具体 payload，也不关心工具函数内部怎么执行。它只负责整体循环。
 
-模型调用被压到 `LlmClient`：
+模型调用被归给 `LlmClient`：
 
-```ts
+```typescript
 export interface LlmClient {
   complete(request: LlmRequest): Promise<AssistantMessage>;
 }
@@ -299,10 +344,12 @@ export interface StreamingLlmClient extends LlmClient {
   stream(request: LlmRequest): AsyncIterable<LlmStreamEvent>;
 }
 ```
+
+`LlmClient` 是一个“模型调用层的合同”，它规定：任何一个能跟模型对话的客户端，都必须提供一个 `complete(request: LlmRequest)` 方法，这个方法接收一份统一格式的请求 `LlmRequest`，并返回一个 `Promise<AssistantMessage>`，意思就是“我现在先承诺，等模型生成完后会交给你一条标准化的 `AssistantMessage`”。这样 Agent Loop 就不用关心背后是 OpenAI、Anthropic 还是别的供应商，它只需要知道“我调用 `complete`，以后一定会拿到一个标准答案”。接着，`StreamingLlmClient extends LlmClient` 表示它是 `LlmClient` 的流式增强版：它自动继承了 `complete`，所以它既能用非流式方式拿完整答案，又额外增加了一个 `stream(request: LlmRequest): AsyncIterable<LlmStreamEvent>` 方法。这个方法的含义是：它也接收同样的 `LlmRequest`，但返回的不是“一次性结果”，而是一个 `AsyncIterable`，也就是一个可以一条一条读取的事件流；模型每生成一小段，就吐出一个 `LlmStreamEvent`，比如 `text_delta`、`thinking_delta`、`tool_call_delta`、`done`。<br>所以这段代码不是在写具体逻辑，而是在画一条清晰的边界：Agent Loop 只依赖 `complete()` 和 `stream()` 这两个统一入口，模型供应商的所有特殊格式都被关在具体的客户端实现里。
 
 工具调用被压到 `ToolRegistry` 和 `ToolExecutor`：
 
-```ts
+```typescript
 export type AgentTool = {
   name: string;
   description: string;
@@ -311,205 +358,16 @@ export type AgentTool = {
   execute(args: unknown, context: ToolExecutionContext): Promise<ToolResult> | ToolResult;
 };
 ```
+
+`AgentTool` 是一个“工具的标准形状”，它规定：凡是 Agent 能调用的工具，都必须具备这几样东西。`name` 是工具的名字，用来让模型点名，也用来在注册表里查找；`description` 是给模型看的工具说明，相当于“招聘启事”，告诉模型这个工具能干什么；`parameters: JsonSchema` 是工具参数的填写规则，用 `JsonSchema` 这种标准格式描述“模型应该交哪些参数、哪些必填、每个参数是什么格式”，模型看了才知道怎么正确请求这个工具。`executionMode?: "sequential" | "parallel"` 是可选字段，表示这个工具到底允许“排队一个一个执行”还是“可以和其他工具同时并行执行”；`?` 的意思是它可以不填，不填时工具就听任务级的默认策略。最后 `execute(args: unknown, context: ToolExecutionContext): Promise<ToolResult> | ToolResult` 是这个工具真正干活的方法：它接收模型提交的参数 `args` 和这次执行需要的上下文 `context`，然后返回一个 `ToolResult`；返回 `Promise<ToolResult> | ToolResult` 的意思是“这个工具可以立刻给出结果，也可以异步执行、等一会儿再给结果”，这样既支持简单的同步计算，也支持查天气、读文件这类需要等待的外部操作。所以这段代码本身没有写“计算器怎么计算”，它只是画出一个统一模板：所有工具都必须有名字、说明、参数规则、执行方式，以及一个能真正跑起来并返回结果的方法。
 
 于是 Agent Loop 本身可以保持很小。
 
-> 通俗解释：这里最关键的不是语法，而是“边界”。`LlmClient` 只负责和模型说话；`ToolRegistry` 只负责管理有哪些工具；`ToolExecutor` 只负责执行工具。Agent Loop 本身不亲自做这些事，它只负责喊“开始”“下一轮”“结束”。这样以后换模型、换工具，都不用重写整辆车。
-
-#### 第一段代码：`LlmClient` 的两种接口，逐行看
-
-```ts
-export interface LlmClient {
-  complete(request: LlmRequest): Promise<AssistantMessage>;
-}
-
-export interface StreamingLlmClient extends LlmClient {
-  stream(request: LlmRequest): AsyncIterable<LlmStreamEvent>;
-}
-```
-
-逐行拆解：
-
-1. `export interface LlmClient {`：定义一个公开的“合同”，名字叫 `LlmClient`。它不写具体实现，只规定“一个能调用模型的类，必须长成什么样”。
-2. `complete(request: LlmRequest): Promise<AssistantMessage>;`：规定这个接口必须有一个 `complete` 方法。它接收一个统一格式的请求 `LlmRequest`，返回一个 `Promise`，也就是“以后会拿到一个结果”的承诺；承诺最终交付的东西是一个 `AssistantMessage`。
-3. `export interface StreamingLlmClient extends LlmClient {`：定义 `StreamingLlmClient`，它继承 `LlmClient`，所以它一定也具备 `complete` 方法，同时再增加流式能力。
-4. `stream(request: LlmRequest): AsyncIterable<LlmStreamEvent>;`：规定它必须有一个 `stream` 方法。它也接收 `LlmRequest`，但返回的不是一次性答案，而是一个可以一条一条读取的事件流，每条事件是一个 `LlmStreamEvent`。
-
-> 通俗解释：`interface` 是“合同”，`Promise` 是“承诺”，`AsyncIterable` 是“可以一边等一边逐个读取的清单”。普通接口说“你一次性把答案给我”；流式接口说“你把答案切成小块，边生成边给我”。
-
-#### 第二段代码：`AgentTool` 这个工具的标准形状，逐行看
-
-```ts
-export type AgentTool = {
-  name: string;
-  description: string;
-  parameters: JsonSchema;
-  executionMode?: "sequential" | "parallel";
-  execute(args: unknown, context: ToolExecutionContext): Promise<ToolResult> | ToolResult;
-};
-```
-
-逐行拆解：
-
-1. `export type AgentTool = {`：定义一个公开的类型，名字叫 `AgentTool`，意思是“凡是工具，都必须长成这样”。
-2. `name: string;`：工具的名字，用来让模型点名，也用来注册、查找。
-3. `description: string;`：给模型看的工具介绍，相当于“招聘启事”，告诉模型这个工具是干什么的。
-4. `parameters: JsonSchema;`：工具参数的“填写表单”，用 `JsonSchema` 这种标准格式描述哪些参数允许填、哪些必填、格式是什么。
-5. `executionMode?: "sequential" | "parallel";`：可选字段，表示这个工具是“只能排队执行”还是“可以并行执行”。`?` 的意思是“可以不填”，不填就听全局默认。
-6. `execute(args: unknown, context: ToolExecutionContext): Promise<ToolResult> | ToolResult;`：工具真正干活的方法。它接收模型提交的参数 `args` 和上下文 `context`；可以立刻返回 `ToolResult`，也可以返回一个“以后会有结果”的 `Promise<ToolResult>`。
-
-> 通俗解释：`AgentTool` 就像一张“工具员工登记表”：姓名、简介、要填的申请表、能不能和别人同时干活，以及他真正干活的方法。`unknown` 表示参数一开始不知道是什么，等运行后再检查。
-
+> **通俗解释：这里最关键的不是语法，而是“边界”。`LlmClient` 只负责和模型说话；`ToolRegistry` 只负责管理有哪些工具；`ToolExecutor` 只负责执行工具。Agent Loop 本身不亲自做这些事，它只负责喊“开始”“下一轮”“结束”。这样以后换模型、换工具，都不用重写整辆车。**
 
 ---
 
-
-## Agent Loop 核心代码
-
-当前最小循环在 `src/agent/agent-loop.ts` 的 `runInternal` 里。精简后是这样：
-
-```ts
-private async runInternal(
-  input: string,
-  options: AgentRunOptions = {}
-): Promise<AgentRunResult> {
-  const maxTurns = options.maxTurns ?? this.maxTurns;
-  const userMessage: AgentMessage = { role: "user", content: input };
-  this.messages.push(userMessage);
-
-  let lastAssistant: AssistantMessage | undefined;
-
-  for (let turn = 1; turn <= maxTurns; turn += 1) {
-    const assistant = await this.completeAssistant(turn, {
-      model: this.model,
-      systemPrompt: this.systemPrompt,
-      messages: [...this.messages],
-      tools: this.tools.toLlmToolSpecs(),
-      reasoning: options.reasoning ?? this.reasoning,
-      signal: options.signal
-    });
-
-    lastAssistant = assistant;
-    this.messages.push(assistant);
-
-    const toolCalls = assistant.toolCalls ?? [];
-    if (toolCalls.length === 0) {
-      return this.buildResult(assistant.content, turn, "final");
-    }
-
-    const toolResults = await this.executeToolCalls(turn, toolCalls, options.signal);
-    this.messages.push(...toolResults);
-  }
-
-  return this.buildResult(lastAssistant?.content ?? "", maxTurns, "max_turns");
-}
-```
-
-这段代码就是 Observe / Think / Act（aka reAct）的工程版本：
-
-| 理论概念 | 代码对应 |
-|---|---|
-| Observe | `messages` 里已有的 user、assistant、tool result |
-| Think | `completeAssistant(...)` 调用模型 |
-| Act | `executeToolCalls(...)` 执行模型请求的工具 |
-| Observe again | `this.messages.push(...toolResults)` 将工具结果写回历史 |
-| Stop | assistant 没有 tool call，或达到 maxTurns |
-
-> 通俗解释：`maxTurns` 是“最多允许循环多少轮”，防止模型陷入无限循环。`messages` 是这一轮任务的全部历史；每一轮模型看到的都是当前完整历史。`toolCalls.length === 0` 的意思是“模型这次没有要调用工具”，那就代表它可以给出最终答案了。
-
-注意这里的 `messages: [...this.messages]`，每一轮模型看到的是当前完整 history。工具结果作为 `role: "tool"` 的消息存在，所以模型能基于上一次 action 的 observation 继续行动。
-
-#### 长代码逐行拆解
-
-这段代码是整套 Agent 循环最核心的一段。我们按“程序从进入函数到最后结束”的顺序，一行一行看：
-
-```ts
-private async runInternal(
-  input: string,
-  options: AgentRunOptions = {}
-): Promise<AgentRunResult> {
-```
-
-1. `private async runInternal(...)`：这是一个内部方法。`private` 表示它只在 Agent 内部被调用，不对外暴露；`async` 表示这个方法内部会等待模型或工具返回，可以边等边做下一步。
-2. `input: string`：用户这次输入的内容，通常是一句话。
-3. `options: AgentRunOptions = {}`：本次运行的附加设置。`= {}` 表示如果不传，就当它是一份空设置。
-4. `: Promise<AgentRunResult>`：方法最终会返回一个“以后会到手的运行结果”。
-
-```ts
-  const maxTurns = options.maxTurns ?? this.maxTurns;
-  const userMessage: AgentMessage = { role: "user", content: input };
-  this.messages.push(userMessage);
-```
-
-5. `const maxTurns = options.maxTurns ?? this.maxTurns;`：先决定最多能循环多少轮。`??` 的意思是“如果左边有值就用左边，如果左边为空就用右边”。也就是说，本次调用如果专门设置了轮数，就听本次的；没设置就用 Agent 默认值。
-6. `const userMessage: AgentMessage = { role: "user", content: input };`：把用户输入包成一条 Agent 内部统一认识的消息，角色是 `user`，内容是输入文本。
-7. `this.messages.push(userMessage);`：把这条用户消息追加到当前任务的历史里。从这一刻起，它也是模型下一轮会看到的内容。
-
-```ts
-  let lastAssistant: AssistantMessage | undefined;
-
-  for (let turn = 1; turn <= maxTurns; turn += 1) {
-```
-
-8. `let lastAssistant: AssistantMessage | undefined;`：先准备一个变量，用来记住“最近一次模型回答”。之所以可能为空，是因为如果第一轮就出问题，不一定拿得到答案。
-9. `for (let turn = 1; turn <= maxTurns; turn += 1)`：建立循环。从第 1 轮开始，每跑完一轮 `turn` 加 1，直到超过 `maxTurns` 为止。这就是“最多允许跑多少轮”的保护。
-
-```ts
-    const assistant = await this.completeAssistant(turn, {
-      model: this.model,
-      systemPrompt: this.systemPrompt,
-      messages: [...this.messages],
-      tools: this.tools.toLlmToolSpecs(),
-      reasoning: options.reasoning ?? this.reasoning,
-      signal: options.signal
-    });
-```
-
-10. `const assistant = await this.completeAssistant(...)`：调用 Agent 内部的“让模型回答一次”的方法，并等待它返回。`await` 的意思是“这里会花时间，我等它完成再继续”。
-11. `model: this.model`：告诉方法用哪个模型。
-12. `systemPrompt: this.systemPrompt`：把系统提示词也传进去，相当于“模型一直要遵守的总规则”。
-13. `messages: [...this.messages]`：把当前完整历史复制一份给模型。`[...]` 是“把数组展开成新数组”，防止模型看到的内容和内部历史互相干扰。
-14. `tools: this.tools.toLlmToolSpecs()`：把工具列表转换成模型能看懂的“工具说明书”。
-15. `reasoning: options.reasoning ?? this.reasoning`：决定这次思考用力程度；本次设置优先，否则用默认。
-16. `signal: options.signal`：把取消信号传下去，让模型知道用户是否已经中途取消。
-
-```ts
-    lastAssistant = assistant;
-    this.messages.push(assistant);
-
-    const toolCalls = assistant.toolCalls ?? [];
-    if (toolCalls.length === 0) {
-      return this.buildResult(assistant.content, turn, "final");
-    }
-```
-
-17. `lastAssistant = assistant;`：把这次模型回答记进变量，防止后面循环结束但拿不到答案。
-18. `this.messages.push(assistant);`：把模型回答追加到历史里。模型说过的话，之后也会成为它自己看到的上下文。
-19. `const toolCalls = assistant.toolCalls ?? [];`：检查模型有没有请求调用工具。如果它这次没提任何工具，就得到一个空数组。
-20. `if (toolCalls.length === 0)`：如果模型没有要求调用工具，说明它已经可以直接给出最终答案。
-21. `return this.buildResult(assistant.content, turn, "final");`：把模型这次的文字内容、轮次、状态 `final` 打包成结果返回，整个 turn loop 结束。
-
-```ts
-    const toolResults = await this.executeToolCalls(turn, toolCalls, options.signal);
-    this.messages.push(...toolResults);
-  }
-
-  return this.buildResult(lastAssistant?.content ?? "", maxTurns, "max_turns");
-}
-```
-
-22. `const toolResults = await this.executeToolCalls(turn, toolCalls, options.signal);`：如果模型请求了工具，宿主程序就真的去执行这些工具，并等待所有结果返回。
-23. `this.messages.push(...toolResults);`：把执行结果一条一条写回历史。这里的 `...` 表示“展开数组”，等于把每个结果分别追加进去，而不是把整个数组当成一条消息。
-24. 回到 `for`：这一轮结束，`turn` 加 1，如果还没超过 `maxTurns`，模型就能看到刚写回的工具结果，继续下一轮。
-25. `return this.buildResult(lastAssistant?.content ?? "", maxTurns, "max_turns");`：如果循环次数已经用完，但模型还没给出最终答案，就强制结束，状态标记为 `max_turns`。`?.` 的意思是“如果 `lastAssistant` 存在才读它的 content；不存在就返回空字符串”，避免程序因为没有答案而崩溃。
-
-> 通俗解释：整段代码就是“让模型想一次；如果它说要工具，宿主就去执行并把结果写进历史；再让模型想一次；直到它给最终回答或轮数用完”。
-
-
----
-
-
-## LLM Client：隔离模型供应商
+## 2. LLM Client：隔离模型供应商
 
 我们的 OpenAI 格式接口接入在 `src/llm/openai-responses-client.ts`。它做两件事：
 
@@ -518,7 +376,7 @@ private async runInternal(
 
 内部消息到 Responses input 的转换逻辑大概是：
 
-```ts
+```typescript
 if (message.role === "user") {
   input.push({
     type: "message",
@@ -553,23 +411,21 @@ if (message.role === "tool") {
 }
 ```
 
+这段代码是 `OpenAIResponsesClient` 里的“翻译层”核心：它把 Agent 内部认识的 `message`，逐条翻译成 OpenAI Responses API 认识的 `input` 数组，这样 Agent Loop 不需要接触 OpenAI 的格式。
+
+第一个分支处理 `message.role === "user"`。如果这是一条用户消息，就向 `input` 里加入一个 `type: "message"`、`role: "user"` 的对象，并把用户正文放进 `content` 数组里的 `input_text` 中。也就是说，“用户说了一句话”被翻译成了 API 认得的“一条用户输入”。
+
+第二个分支处理 `message.role === "assistant"`。如果这是一条模型消息，就先翻译成 `type: "message"`、`role: "assistant"` 的对象，模型正文放进 `output_text`。但如果这条模型消息里还带有工具调用请求，就需要再处理 `for (const toolCall of message.toolCalls ?? [])`：`?? []` 表示没有工具调用时就当作空数组，循环不会执行。每有一个 `toolCall`，就往 `input` 里再追加一个 `type: "function_call"` 对象，其中 `call_id` 是这个工具调用在本次对话里的唯一编号，`name` 是工具名，`arguments` 是模型填好的参数，通过 `JSON.stringify` 转成字符串形式交给 API。
+
+第三个分支处理 `message.role === "tool"`。如果这是一条工具结果消息，就翻译成 `type: "function_call_output"`，用 `call_id: message.toolCallId` 告诉 API“这个结果对应哪一次工具调用”，再把结果内容放进 `output` 字段。
+
+所以这段代码的本质是：**把 Agent 内部的三类消息，重新打包成 OpenAI Responses API 认得的三种记录**。用户消息变成 `message`，模型回答变成 `message` 加可能的 `function_call`，工具结果变成 `function_call_output`。这样 Agent 内部始终只用统一的 `AgentMessage`，供应商格式的差异全被关在这段翻译逻辑里。
+
 这个转换层很重要。Agent Loop 只需要认识 `AgentMessage`，不用认识 Responses API、Chat Completions API 或 Anthropic API。以后要新增其他的 provider 支持，只需要实现新的 `LlmClient`，不需要重写整个 Agent Loop。
 
 > 通俗解释：可以把它想象成“统一的快递单”和“各家快递公司的不同表单”。Agent 内部只认自己那一种快递单；`LlmClient` 负责把这种快递单翻译成 OpenAI 要的格式，或者反过来把 OpenAI 的回复翻译回 Agent 认识的格式。以后换一家快递公司，只换翻译员，不换收件流程。
 
-这里直接回答你后面可能会问的问题：**“翻译层”就是“转换层”**。
-
-这两个词说的是同一个东西。文章里说“转换层很重要”，说的就是 `LlmClient` / `OpenAIResponsesClient` 干的活：把 Agent 内部统一的 `AgentMessage` 翻译成 OpenAI Responses API 认得的 `input`，再把 OpenAI 返回的内容翻译回 `AssistantMessage`。你可以把 `LlmClient` 理解成“翻译员”，把“转换层”理解成“翻译员所在的岗位”。
-
-上面的转换代码也可以逐行看：
-
-1. `if (message.role === "user")`：如果这条内部消息是用户消息，就把它翻译成 Responses API 的 `input` 里一条 `type: "message"`、`role: "user"` 的记录，正文放在 `input_text` 里。
-2. `if (message.role === "assistant")`：如果这条内部消息是模型回答，先翻译成 `type: "message"`、`role: "assistant"` 的记录；如果这次模型还请求了工具调用，就再把每个工具调用翻译成 `type: "function_call"` 的记录，并带上调用 ID、工具名、参数。
-3. `if (message.role === "tool")`：如果这条内部消息是工具结果，就翻译成 `type: "function_call_output"`，用 `call_id` 告诉 API“这是哪一次工具调用的结果”，再用 `output` 填上结果内容。
-
-> 通俗解释：这套代码就是“拆包裹、重新打包”。Agent 内部是一种包裹，OpenAI 要的是另一种包裹；翻译层负责把每一件都塞进对方认得的盒子里，再贴上正确的标签。
-
-当前 OpenAI Responses Client 同时支持 streaming。它会把 SSE 事件归一成内部事件：
+当前 OpenAI Responses Client 同时支持 streaming。它会把 SSE（一种“服务器持续往客户端吐数据”的通信方式。） 事件归一成内部事件：
 
 | Responses stream event | 内部事件 |
 |---|---|
@@ -578,19 +434,19 @@ if (message.role === "tool") {
 | `response.function_call_arguments.delta` | `tool_call_delta` |
 | `response.completed` | `done` |
 
-所以 Agent 可以一边接收文本增量，一边保留最终 `AssistantMessage`，不需要把 streaming 和非 streaming 写成两套循环。
+因为每个 `delta` 都对应同一个回答的不同部分，Agent 可以一边接收 `text_delta`，一边把碎片累积起来；等收到 `done`，说明全部内容已经到齐，就能拼出一个完整的 `AssistantMessage`。这个过程对 Agent 是透明的：它仍然只等待“最终答案”，只不过这个最终答案是边收边拼出来的。
 
-> 通俗解释：`SSE` 是一种“服务器持续往客户端吐数据”的通信方式。`delta` 是“一小块增量”的意思，所以 `text_delta` 就是“新吐出来的一小段文字”。非流式像“一次性给你整封邮件”，流式像“一个字一个字发微信”。
+所以结论就是：**不管是 streaming 还是非 streaming，Agent 最终拿到的都是同一个 `AssistantMessage`，只是交付过程不同。** 既然 Agent 只需要面对这个统一结果，那它的循环逻辑就只用写一套：调用模型、拿最终消息、检查工具调用、继续下一轮。真正区分流式和非流式的，只发生在 `LlmClient` 内部，不需要污染 Agent Loop。
 
+> `delta` 是“一小块增量”的意思，所以 `text_delta` 就是“新吐出来的一小段文字”。
 
 ---
 
-
-## Tool System：让错误也进入循环
+## 3. Tool System：让错误也进入循环
 
 工具注册表很简单：
 
-```ts
+```typescript
 export class ToolRegistry {
   private readonly tools = new Map<string, AgentTool>();
 
@@ -615,9 +471,17 @@ export class ToolRegistry {
 }
 ```
 
+`ToolRegistry` 是 Agent 的“工具注册表”，它的作用就是把所有工具集中管理起来，让 Agent 能按名字找到工具，也能把工具列表转换给模型看。类里面用 `private readonly tools = new Map<string, AgentTool>()` 保存一张“工具名 → 工具对象”的字典：`private` 表示这张表只能由注册表自己操作，外部不能随便改；`readonly` 表示这个字典的引用不会在创建后被替换掉；`Map<string, AgentTool>` 则规定了键是工具名字，值是符合 `AgentTool` 形状的工具对象。
+
+`register(tool: AgentTool)` 是登记工具的方法。它先检查 `this.tools.has(tool.name)`，也就是看看这个名字有没有被登记过；如果已经存在，就执行 `throw new Error(...)` 主动报错，防止两个工具抢同一个名字，因为模型点名时必须保证名字唯一。如果名字没问题，就调用 `this.tools.set(tool.name, tool)`，把“名字 → 工具”这对关系放进字典里。
+
+`get(name: string)` 是查找工具的方法，返回 `AgentTool | undefined`，意思是“能找到就返回工具，找不到就返回 `undefined`”。它内部直接执行 `return this.tools.get(name)`，也就是从字典里按名字取工具。`toLlmToolSpecs()` 是“生成给模型看的工具说明书”的方法，返回一个 `LlmToolSpec[]`。它先通过 `this.list()` 拿到当前所有工具，再用 `.map(...)` 把每个工具都转换成一个精简对象，只保留模型需要知道的三样东西：`name`、`description`、`parameters`。
+
+所以这段代码的本质是：**一个工具管理员**。它负责登记工具、防止重名、按名字查找，以及在调用模型前，把完整的工具对象压缩成模型能看懂的精简说明书。模型看到的不是工具的完整实现，只是一个“这个工具叫什么、有什么用、参数怎么填”的目录。
+
 执行器也保持了最小：
 
-```ts
+```typescript
 export class ToolExecutor {
   constructor(private readonly registry: ToolRegistry) {}
 
@@ -647,6 +511,8 @@ export class ToolExecutor {
   }
 }
 ```
+
+`ToolExecutor` 是 Agent 的“工具执行员”，它的职责就是拿到模型发出的 `toolCall`，真正去执行对应的工具，并且无论成功还是失败，都把结果包装成一条 `ToolResultMessage` 交回给 Agent Loop。它通过 `constructor(private readonly registry: ToolRegistry)` 在创建时保存一份工具注册表，之后执行时才能根据工具名查找到真正的工具。`execute(toolCall: ToolCall, signal?: AbortSignal)` 是执行入口：`toolCall` 是模型发出的“我要调用这个工具”的请求，里面包含工具名和参数；`signal` 是可选取消信号，用户中途取消时可以通知执行过程停止。方法开头先执行 `const tool = this.registry.get(toolCall.name)`，也就是按模型点名的工具名去注册表里查；如果 `!tool`，说明这个工具根本不存在，程序不会直接崩溃，而是调用 `toToolResultMessage(toolCall, { content: "Tool not found: ...", isError: true })`，生成一条“找不到工具”的错误结果消息，并把 `isError` 标记为 `true`，让模型下一轮能看到这个失败原因。如果工具存在，就进入 `try` 块：先调用 `validateArguments(tool.parameters, toolCall.arguments)` 检查模型提交的参数是否符合工具规定的 `schema`，不符合就会抛错；符合后执行 `await tool.execute(toolCall.arguments, { toolCallId: toolCall.id, signal })`，真正让工具干活，并把这次工具调用的 ID 和取消信号传给工具。工具顺利返回后，再通过 `toToolResultMessage(toolCall, result)` 把真实结果包装成标准消息。如果 `try` 块里任何一步出错，比如参数不对、工具内部抛异常，都会被 `catch (error)` 接住，程序不会让整个 Agent 中断，而是把错误内容 `error.message` 或转换后的 `String(error)` 包成一条 `isError: true` 的消息返回。所以这段代码的本质是：**不管工具成功还是失败，都把它变成模型能看到的 observation**。成功就告诉模型“结果是什么”，失败就告诉模型“哪里错了”，模型因此有机会修正参数、换工具或向用户解释原因，而不是让宿主程序直接崩溃。这正是第一篇里说的“失败是第一等公民”。
 
 这里有一个小但关键的设计：工具不存在、参数错误、执行抛错，都不会直接中断 Agent。它们会变成一条 `role: "tool"` 且 `isError: true` 的消息，被写回 history。
 
@@ -654,102 +520,7 @@ export class ToolExecutor {
 
 对模型来说，错误不是外部异常，而是一条 observation。模型可以基于它修正参数、换工具、或者告诉用户失败原因。
 
-> 通俗解释：`Map` 在这里就是一个“名字 → 工具”的字典。`register` 是登记工具，`get` 是查找工具。`schema` 是工具参数的填写规则，`validateArguments` 就是检查模型交上来的参数有没有按规则填。`AbortSignal` 则是“如果用户中途取消，就发一个停止信号”。
-
-#### `ToolRegistry` 逐行拆解
-
-```ts
-export class ToolRegistry {
-  private readonly tools = new Map<string, AgentTool>();
-
-  register(tool: AgentTool): void {
-    if (this.tools.has(tool.name)) {
-      throw new Error(`Tool already registered: ${tool.name}`);
-    }
-    this.tools.set(tool.name, tool);
-  }
-
-  get(name: string): AgentTool | undefined {
-    return this.tools.get(name);
-  }
-
-  toLlmToolSpecs(): LlmToolSpec[] {
-    return this.list().map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters
-    }));
-  }
-}
-```
-
-逐行拆解：
-
-1. `export class ToolRegistry {`：定义一个公开的“工具注册表”类，专门用来管理有哪些工具。
-2. `private readonly tools = new Map<string, AgentTool>();`：内部维护一张“名字 → 工具”的字典。`private` 表示这张表只能由注册表自己操作；`readonly` 表示这张表的引用不会在创建后换掉；`Map<string, AgentTool>` 表示键是工具名，值是工具对象。
-3. `register(tool: AgentTool): void`：定义“登记工具”的方法，接收一个符合 `AgentTool` 形状的工具。
-4. `if (this.tools.has(tool.name))`：先检查这个名字有没有已经登记过。
-5. `throw new Error(...)`：如果名字重复，就主动报错，防止两个工具抢同一个名字。
-6. `this.tools.set(tool.name, tool);`：如果名字不重复，就把工具放进字典，键是工具名，值是工具本身。
-7. `get(name: string): AgentTool | undefined`：定义“查工具”的方法。给一个名字，返回对应工具；找不到就返回 `undefined`。
-8. `return this.tools.get(name);`：直接从字典里查。
-9. `toLlmToolSpecs(): LlmToolSpec[]`：定义“生成给模型看的工具说明书”的方法。它不把完整工具对象交给模型，只把模型需要的三个字段抽出来：`name`、`description`、`parameters`。
-10. `return this.list().map(...)`：把工具列表逐个转换，生成一份只包含“模型需要知道的信息”的说明书数组。
-
-> 通俗解释：`ToolRegistry` 像“员工花名册”。登记时检查有没有重名，查询时按名字找员工；给模型看的不是员工全部档案，而是精简版“岗位说明书”。
-
-#### `ToolExecutor` 逐行拆解
-
-```ts
-export class ToolExecutor {
-  constructor(private readonly registry: ToolRegistry) {}
-
-  async execute(toolCall: ToolCall, signal?: AbortSignal): Promise<ToolResultMessage> {
-    const tool = this.registry.get(toolCall.name);
-
-    if (!tool) {
-      return toToolResultMessage(toolCall, {
-        content: `Tool not found: ${toolCall.name}`,
-        isError: true
-      });
-    }
-
-    try {
-      validateArguments(tool.parameters, toolCall.arguments);
-      const result = await tool.execute(toolCall.arguments, {
-        toolCallId: toolCall.id,
-        signal
-      });
-      return toToolResultMessage(toolCall, result);
-    } catch (error) {
-      return toToolResultMessage(toolCall, {
-        content: error instanceof Error ? error.message : String(error),
-        isError: true
-      });
-    }
-  }
-}
-```
-
-逐行拆解：
-
-1. `constructor(private readonly registry: ToolRegistry) {}`：构造执行器时，把工具注册表传进来并保存好。执行器需要靠注册表查工具。
-2. `async execute(toolCall: ToolCall, signal?: AbortSignal): Promise<ToolResultMessage>`：定义“执行一次工具调用”的方法。`toolCall` 是模型发出的“我要用这个工具”的请求；`signal` 是可选取消信号。
-3. `const tool = this.registry.get(toolCall.name);`：按工具名去注册表里查一下，看这个工具是否存在。
-4. `if (!tool)`：如果查不到，说明模型点了一个不存在的工具。
-5. `return toToolResultMessage(...)`：不抛异常让整个程序崩溃，而是生成一条 `Tool not found` 的错误结果消息，标记 `isError: true`，然后返回。
-6. `try { ... }`：尝试执行下面的正常流程；如果中途出错，会被 `catch` 接住。
-7. `validateArguments(tool.parameters, toolCall.arguments);`：先检查模型提交的参数是否符合工具规定的 `schema`，不符合就直接失败。
-8. `const result = await tool.execute(toolCall.arguments, ...);`：真正调用工具自己定义的 `execute` 方法，等待它返回结果。
-9. `return toToolResultMessage(toolCall, result);`：把真实执行结果包装成一条 `role: "tool"` 消息，返回给 Agent Loop。
-10. `catch (error)`：如果工具执行过程中抛出了错误，不中断 Agent。
-11. `return toToolResultMessage(...)`：把错误信息也包装成工具结果消息，并标记 `isError: true`。
-
-> 通俗解释：`ToolExecutor` 像“派单员”。模型说要用某个工具，派单员先查这个工具在不在；在的话先核对表格有没有填对，再让工具去干；不管干成还是干砸，都要把结果写成一封正式的“结果报告”交回给 Agent，而不是让整个公司停工。
-
-
 ---
-
 
 ## 示例工具
 
@@ -757,7 +528,7 @@ export class ToolExecutor {
 
 `calculator` 的定义是：
 
-```ts
+```typescript
 export const calculatorTool: AgentTool = {
   name: "calculator",
   description: "Evaluate a basic arithmetic expression.",
@@ -790,17 +561,17 @@ export const calculatorTool: AgentTool = {
 };
 ```
 
+`calculatorTool` 是一个符合 `AgentTool` 标准形状的具体工具对象，它的作用就是给 Agent 提供一台“计算器”。`name` 是工具名，模型通过 `calculator` 这个名字来点名调用它；`description` 是给模型看的说明，让模型知道这个工具适合处理 `(123 + 456) * 789` 这类算术表达式。`parameters` 用 `JsonSchema` 规定了模型提交参数时的格式：模型必须提交一个对象，里面只能有一个 `expression` 字段，类型必须是字符串，内容必须是“只包含数字、空格、括号、`+ - * / %` 和点号”的算术式子；`required: ["expression"]` 表示这个参数必填，`additionalProperties: false` 表示模型不能提交 `expression` 之外的多余字段。真正的执行逻辑放在 `execute(args)` 里：它先通过 `readStringProperty(args, "expression")` 取出模型提交的 `expression` 字符串，然后用 `if (!/^[\d\s+\-*/().%]+$/.test(expression))` 做安全检查，只允许出现数字、空格、括号和这些数学运算符，一旦出现字母或其他内容就 `throw new Error(...)`，防止不安全的内容混进表达式。检查通过后，它用 ``Function(`"use strict"; return (${expression});`)()``把字符串当成一个真正的数学表达式计算出来，得到 `value`；接着再用 `if (typeof value !== "number" || !Number.isFinite(value))`做二次检查，如果结果不是数字或者不是有限数字，比如NaN或无穷大，就直接报错。只有全部检查通过，才返回 `{ content: String(value) }`，也就是把计算结果转成字符串，包装成一条 `ToolResultMessage` 交给 Agent Loop，让模型下一轮能看到真实计算结果并继续推理。所以这段代码本身不是 Agent 循环，而是一个具体的工具实现：它向系统声明“我有一个计算器工具”，并定义了这个工具“参数怎么填、怎么算、怎么返回”。
+
 这个工具写得很简单，主要是为了能用就行，重点是跑通工具调用链路：
 
 ```text
 tool schema -> model tool call -> tool execution -> tool result message -> next model request
 ```
 
-> 通俗解释：`schema` 告诉模型“你只能提交一个叫 `expression` 的文本参数，里面只能放数字、括号和加减乘除等符号”。模型只要提交符合这个表单的请求，宿主程序就会真正计算，然后把数字结果作为 observation 还给模型。
-
+简单说，`schema` 告诉模型“你只能提交一个叫 `expression` 的文本参数，里面只能放数字、括号和加减乘除等符号”。模型只要提交符合这个表单的请求，宿主程序就会真正计算，然后把数字结果作为 observation 还给模型。
 
 ---
-
 
 ## 运行示例
 
@@ -839,20 +610,15 @@ I’m an AI assistant.
 
 第二轮，模型看到工具 observation，再生成最终回答：先给出计算结果，然后回答 “I’m an AI assistant.”。
 
-> 通俗解释：`reasoning` 是模型“先想后说”的思考过程；`reasoning effort` 是“思考用力程度”。`npm run demo` 只是启动这个演示程序的一条命令。你不需要记命令，只需要记住：模型没有直接背答案，而是先调用计算器，再根据真实结果回答。
-
-
 ---
-
 
 ## 我们从现有项目学到了什么？
 
 这一版虽然叫“最小 Agent Loop”，但它不是最原始的 while loop。它在几个地方提前保留了扩展点。
 
-
 ### 1. 流式和非流式共用同一个 loop
 
-```ts
+```typescript
 if (!isStreamingLlmClient(this.llm)) {
   return this.llm.complete(request);
 }
@@ -861,36 +627,16 @@ for await (const event of this.llm.stream(request)) {
   // thinking_delta / text_delta / tool_call_delta / done
 }
 ```
+
+`isStreamingLlmClient(this.llm)` 是在检查当前这个 `LlmClient` 是否具有流式能力，前面的 `!` 表示“如果不支持”。如果不支持，就走非流式路径，直接 `return this.llm.complete(request)`，意思是把 `request` 发给模型，等模型完整生成完，再一次性返回一个完整的 `AssistantMessage`。<br>如果支持流式，就不走 `return`，而是进入下面的 `for await (const event of this.llm.stream(request))`。这里的 `this.llm.stream(request)` 返回一个事件流，`for await` 会一条一条地接收事件：模型每吐出一小段内容，就产生一个 `event`，程序可以立即处理，而不需要等全部生成完。注释里的四种事件就是流式过程中可能出现的关键增量：`thinking_delta` 是模型的思考片段，`text_delta` 是正文片段，`tool_call_delta` 是工具调用参数片段，`done` 表示整个回答已经结束。所以这段代码的本质是一个“分岔口”：先检查模型客户端有没有流式能力，没有就用 `complete()` 一次拿完整答案，有就用 `stream()` 边生成边接收；但无论走哪条路，最终都会得到一个完整的模型回答，因此 Agent Loop 本身的循环逻辑不需要为流式和非流式各写一套。
 
 streaming 只是 LLM Client 的增强能力。Agent Loop 仍然只等待一个最终 `AssistantMessage` 来决定是否执行工具。
-
-> 通俗解释：流式只是“显示方式更顺滑”，Agent 做决策时依然等模型给出完整答复，不会因为界面一直在刷新就改变循环逻辑。
-
-这段代码逐行看：
-
-```ts
-if (!isStreamingLlmClient(this.llm)) {
-  return this.llm.complete(request);
-}
-
-for await (const event of this.llm.stream(request)) {
-  // thinking_delta / text_delta / tool_call_delta / done
-}
-```
-
-1. `isStreamingLlmClient(this.llm)`：检查当前这个模型客户端有没有“流式能力”。`!` 表示“没有”。
-2. `return this.llm.complete(request);`：如果模型客户端不支持流式，就走非流式路径：把请求发过去，等完整答案回来。
-3. `for await (const event of this.llm.stream(request))`：如果支持流式，就走流式路径：模型每吐一小段，就收到一个事件。
-4. 注释里的四种事件：`thinking_delta` 是思考片段，`text_delta` 是正文片段，`tool_call_delta` 是工具调用参数片段，`done` 是全部结束。
-
-> 通俗解释：这段代码像“检查餐厅有没有上菜传送带”。没有传送带，就等整桌菜一起端上来；有传送带，就一道一道接。不管哪种方式，最后都能吃上饭，Agent 的循环逻辑不用变。
-
 
 ### 2. 工具可以并行执行，但历史顺序稳定
 
 `executeToolCalls` 支持两种策略：
 
-```ts
+```typescript
 const mustRunSequentially =
   this.toolExecution === "sequential" ||
   toolCalls.some((toolCall) => this.tools.get(toolCall.name)?.executionMode === "sequential");
@@ -904,40 +650,13 @@ const results = await Promise.all(
 );
 ```
 
+这段代码解决的是“这一批工具到底该顺序执行还是并行执行”的问题。第一行 `const mustRunSequentially = this.toolExecution === "sequential" || toolCalls.some(...)` 是在计算一个布尔值，名字 `mustRunSequentially` 就是“这一批是否必须排队执行”。它先检查 `this.toolExecution === "sequential"`，也就是整个任务级默认策略是不是顺序执行；如果是，就直接判定必须顺序执行。如果不是，再用 `toolCalls.some((toolCall) => ...)` 检查这次模型请求的所有工具里，有没有任何一个工具声明自己必须顺序执行。这里的 `.some()` 意思是“只要有一个满足，结果就是 true”；对于每个 `toolCall`，它通过 `this.tools.get(toolCall.name)` 从工具注册表里找到对应的工具，再用 `?.executionMode === "sequential"` 查看这个工具自己声明的执行模式是不是 `sequential`。如果全局要求顺序，或者任何单个工具要求顺序，`mustRunSequentially` 就是 true，于是进入 `if (mustRunSequentially)` 分支，执行注释里的 `// one by one`，也就是一个工具一个工具地排队跑，前一个完成才轮到下一个。如果没有触发顺序条件，程序就跳过 `if`，走到 `const results = await Promise.all(toolCalls.map(async (toolCall) => this.executor.execute(toolCall, signal)))`。这里的 `toolCalls.map(...)` 会把每个 `toolCall` 都转换成一个“执行这个工具”的异步任务，然后 `Promise.all` 让这些任务同时开始执行，并且等待全部完成；`signal` 会被传给每个工具，用来支持中途取消。`Promise.all` 还有一个很关键的保证：结果数组 `results` 的顺序和输入数组 `toolCalls` 的顺序一致，不会因为哪个工具先跑完就排在前面。
+
+所以这段代码的本质就是：先判断“要不要排队”，如果要就一个接一个执行；如果不需要，就并行执行，但最终结果仍然按模型最初发出工具调用的顺序排列，保证模型看到的上下文顺序稳定。
+
 如果模型一次请求多个互不依赖的工具，未来可以并发执行。但 `Promise.all` 的结果顺序和输入数组一致，所以写回 history 的顺序仍然稳定。Codex 和 Pi 的实现中都有这一部分：**性能可以并行，模型看到的上下文不能乱。**
 
 > 通俗解释：并行执行像“同时点两份外卖”；但端上桌时必须按你下单的顺序摆好，否则模型会以为第二份才是第一份。上下文顺序一旦乱了，模型的推理就可能跟着乱。
-
-把“并行执行和顺序回填”这句话拆开：
-
-- **并行执行**：多个工具可以同时开始运行。比如模型一次要求调用“查天气”和“查日历”，这两个工具互不依赖，宿主程序就让它们同时跑，节省时间。
-- **顺序回填**：不管这些工具谁先跑完，写回历史时都按照模型最初发出工具调用的顺序来，而不是按完成顺序来。
-- **为什么要分开**：模型看到的历史必须稳定。如果模型先请求了 A 再请求了 B，那模型下一轮看到的也应该先是 A 的结果、再是 B 的结果。如果 B 更快跑完就先写 B，模型会以为顺序反了，推理就可能乱。
-
-代码也可以拆开看：
-
-```ts
-const mustRunSequentially =
-  this.toolExecution === "sequential" ||
-  toolCalls.some((toolCall) => this.tools.get(toolCall.name)?.executionMode === "sequential");
-```
-
-1. `this.toolExecution === "sequential"`：如果任务级默认策略是“全部顺序执行”，那么这一批工具必须排队。
-2. `toolCalls.some(...)`：检查这次请求的每一个工具，看有没有任何一个声明自己是 `sequential`。
-3. `some` 的意思是“只要有一个满足就算满足”。所以只要全局是顺序，或者任何一个工具要求顺序，`mustRunSequentially` 就是真，这一批都走顺序执行。
-
-```ts
-const results = await Promise.all(
-  toolCalls.map(async (toolCall) => this.executor.execute(toolCall, signal))
-);
-```
-
-4. `toolCalls.map(...)`：把每个工具调用都变成一个“去执行它”的任务。
-5. `Promise.all(...)`：让这些任务同时开始，然后等全部完成。
-6. `Promise.all` 的一个重要性质是：结果数组的顺序和输入数组的顺序一致，不会因为谁先完成而乱序。这正是“并行执行，但顺序回填”的工程实现。
-
-> 通俗解释：`Promise.all` 像“同时发快递，但按你填写的清单顺序编号”。每个快递员回来的时间可能不同，但最后汇总时依然按清单编号排列，模型看到的顺序不会乱。
-
 
 ### 3. 工具错误不会打断循环
 
@@ -953,18 +672,19 @@ const results = await Promise.all(
 }
 ```
 
+这段代码是“把工具错误变成一条普通历史消息”的示例，它不是一段执行逻辑，而是一个具体的 `ToolResultMessage` 对象，用来告诉模型：“刚才那一次工具调用失败了，原因是这个。”`role: "tool"` 表示这条消息在对话历史里属于工具角色，模型能区分出它不是用户说的，也不是模型自己说的，而是宿主程序执行工具后返回的观察结果；`toolCallId: toolCall.id` 记录的是这次工具调用对应的唯一编号，用来把结果和模型之前发出的某一次 `toolCall` 对应起来；`toolName: toolCall.name` 记录的是工具名，比如 `calculator` 或 `get_weather`，让模型知道失败的是哪个工具；`content: "...error message..."` 是真正给模型看的错误内容，可能是“Tool not found”“参数格式不对”“权限不足”这类信息；`isError: true` 是这个对象的关键标志，它表示“这是一条失败结果，而不是正常返回”。整个设计的核心是：工具失败时，程序不会直接抛异常把 Agent 弄崩溃，而是把失败信息包装成这条 `role: "tool"`、`isError: true` 的消息，然后写回 history，让模型在下一轮像看到普通 observation 一样看到失败原因。模型因此可以自己决定下一步怎么走：修正参数再试一次、换一个工具、或者直接向用户解释为什么失败。这就是“失败是第一等公民”的含义：错误不是程序外部的意外，而是模型可以阅读、可以推理、可以据此继续行动的上下文。
+
 这让模型有机会“读到失败”，而不是让宿主程序直接抛异常结束。
 
 在真实 Agent 中，这个细节非常重要。因为工具失败太常见了：文件不存在、命令退出码非零、网络请求 429、参数 schema 不匹配、权限不足。失败如果不进入上下文，模型就没有自我修正的机会。
 
 > 通俗解释：把错误也写成一条普通消息，相当于让模型看到“刚才这步失败了，原因是这个”。模型可以换一种写法、换一个工具，或者直接告诉用户失败原因。这个设计叫做“失败是第一等公民”。
 
-
 ### 4. 事件系统先行
 
 当前 Agent 支持两种事件消费方式：
 
-```ts
+```typescript
 new Agent({
   onEvent(event) {
     // log, UI, SSE, WebSocket...
@@ -974,7 +694,7 @@ new Agent({
 
 也支持：
 
-```ts
+```typescript
 for await (const event of agent.runEvents(input)) {
   // async iterable event stream
 }
@@ -995,36 +715,9 @@ turn_end
 agent_end
 ```
 
+这两段代码放在一起，是 Agent 事件系统的两种“接收方式”，它们都表示“外部程序可以知道 Agent 正在发生什么”，只是接入方式不同。<br>第一种是 `new Agent({ onEvent(event) { ... } })`：创建 Agent 时，把 `onEvent` 这个回调函数作为配置传进去，相当于提前告诉 Agent“每当发生一个事件，你就调用我这个函数，并把 `event` 交给我”。函数体里的注释 `// log, UI, SSE, WebSocket...` 表示：拿到 `event` 后，你可以把它写入日志、推给网页界面、转成 SSE 发给浏览器，或者通过 WebSocket 推给客户端。这个方式更像“把电话号码留给codex，codex主动打给你”。<br>第二种是 `for await (const event of agent.runEvents(input))`：调用 `agent.runEvents(input)` 启动 Agent，并让它返回一个事件流；`for await` 会在这个流上一条一条地接收事件，每来一个 `event`，循环体就处理一个，没来就先等着。这种方式更像“你打开收音机，广播来一段你听一段”。<br>两种方式收到的都是同一套事件，比如 `agent_start`、`turn_start`、`thinking_delta`、`tool_start`、`tool_end`、`agent_end` 等，区别只在于“Agent 主动推给你”还是“你主动去流里取”。而它们共同的优点是一致的：外部程序只需要订阅这些事件，就能实现进度显示、日志记录、调试、监控等能力，不需要修改 Agent Loop 内部逻辑。所以这两段代码是在展示同一个事件系统的两种消费接口：一种适合“回调式集成”，一种适合“异步流式处理”，但底层都是同一条 agent event stream。
+
 这让最小实现天然可以接 CLI、Web UI、HTTP SSE 或调试日志。后续加可观测性时，不需要再把 Agent Loop 拆开重写。
-
-> 通俗解释：事件系统就像提前装好了“广播插座”。以后你想把 Agent 接到命令行、网页、手机界面或日志系统，只要插上对应的“收音机”就行，不用改 Agent 本身。
-
-这两段事件代码逐行看：
-
-```ts
-new Agent({
-  onEvent(event) {
-    // log, UI, SSE, WebSocket...
-  }
-});
-```
-
-1. `new Agent({ ... })`：创建一个 Agent 实例，并在创建时把配置传进去。
-2. `onEvent(event) { ... }`：给 Agent 注册一个“每当有事件发生时就会被调用”的函数。`event` 就是当前发生的事件。
-3. 注释里的 `log, UI, SSE, WebSocket...` 表示：在这个函数里，你可以把事件写到日志、推给网页界面、转成 SSE 发送给浏览器，或者通过 WebSocket 推给客户端。
-
-```ts
-for await (const event of agent.runEvents(input)) {
-  // async iterable event stream
-}
-```
-
-4. `agent.runEvents(input)`：让 Agent 开始运行，并返回一个事件流。
-5. `for await (... of ...)`：程序不需要一次性拿到全部事件，而是每收到一个事件就处理一个。`await` 表示“来一个处理一个，没来就先等着”。
-6. `const event`：当前这一条事件，例如 `turn_start`、`tool_start`、`tool_end`。
-
-> 通俗解释：第一种方式是“把收音机号码留给广播站，广播站主动打电话给你”；第二种方式是“你打开收音机，广播来一段你听一段”。两种方式都能收到同一套节目。
-
 
 ### 5. Reasoning 配置被放在 LLM 边界
 
@@ -1043,15 +736,11 @@ reasoning: {
 await agent.run("...", { reasoning: false });
 ```
 
-这个配置最终由 `OpenAIResponsesClient` 映射到 Responses API 的 `reasoning` 参数。Agent Loop 不需要知道 provider 的字段细节，只负责把通用配置传下去。
+这两段代码放在一起，展示的是“推理配置怎么从 Agent 传到 LLM 边界”。第一段 `reasoning: { effort: "high", summary: "concise" }` 是一个通用配置对象：`effort: "high"` 表示这次让模型思考用力一点，也就是在回答前多花一些推理；`summary: "concise"` 表示模型对外展示的思考摘要要简洁，不要输出一长串推理过程。这里的 `reasoning` 不是 OpenAI 或 Anthropic 的专有字段，而是 Agent 自己定义的一个通用描述，意思是“我希望模型这次怎么想、怎么展示思考”。<br>第二段 `await agent.run("...", { reasoning: false })` 则是 Agent 的单次运行入口：用户输入是 `"..."`，`{ reasoning: false }` 表示这次运行不开启推理，也就是让模型不进入那种“先详细思考再回答”的模式，直接给出回答。这两段代码合在一起，说明 Agent 对推理的控制是分层的：Agent Loop 只需要输出一个通用的 `reasoning` 配置，比如“用高努力”还是“关闭”，然后把这份配置原样往下传；真正负责把 `effort`、`summary`、`false` 这些通用表达翻译成具体模型 API 字段的，是 `OpenAIResponsesClient` 这类 LLM Client。也就是说，Agent 不需要知道 OpenAI 的某个参数叫什么、Anthropic 的某个参数叫什么，它只表达“这次思考用力一点”或“这次不用思考”，翻译工作全部收在 LLM 边界里。所以这段代码展示的正是“Reasoning 配置放在 LLM 边界”的意思：上层保留通用语义，下层负责供应商适配。
 
 > 通俗解释：“Reasoning 配置放在 LLM 边界”的意思是：Agent 只知道“这次任务思考用力一点还是轻一点”，具体这个要求怎么翻译成 OpenAI 的字段，由翻译层负责。
 
-这里的“翻译层”和前面说的“转换层”也是同一个意思：`OpenAIResponsesClient` 把 Agent 的通用 `reasoning` 配置翻译成 OpenAI Responses API 认识的参数。Agent 不关心字段叫什么，只关心“我传了一个通用要求”。
-
-
 ---
-
 
 ## 下一节做什么？
 
@@ -1085,9 +774,7 @@ messages
 
 > 通俗解释：这一课的问题是“每次把全部历史原样丢给模型”。短对话没问题，但真实任务中历史会越来越长：一个报错日志就可能占掉很大空间。上下文管理器就像一个“精装修的书桌”，决定桌上放哪几份文件、哪些收进抽屉、哪些压成摘要。
 
-
 ---
-
 
 ## 小结
 
@@ -1097,8 +784,6 @@ messages
 
 > **Agent = 循环。循环 = 模型想一步，程序做一步，结果看一步，再让模型想下一步，直到它说“完成”。**
 
-
 ## 参考资料
 
 - 原文：[Build An Agent From Scratch [2]：最小 Agent Loop](https://www.tritium.work/2026/06/08/Build%20An%20Agent%20From%20Scratch%20%5B2%5D%EF%BC%9A%E6%9C%80%E5%B0%8F%20Agent%20Loop/)
-- 同步项目：[Tritium0041/Singularity](https://github.com/Tritium0041/Singularity)
