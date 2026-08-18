@@ -9,5 +9,6 @@
 3. [为什么人工智能不能只靠自己完成自我迭代](./03-为什么人工智能不能只靠自己完成自我迭代.md)
 4. [Agent 的能力边界：它为什么能做和为什么不能做](./04-Agent的能力边界.md)
 5. **[Build An Agent From Scratch [1]：Harness 理论框架](./05-Build-An-Agent-From-Scratch-1-Harness理论框架.md)**
+6. **[Build An Agent From Scratch [2]：最小 Agent Loop](./06-Build-An-Agent-From-Scratch-2-最小AgentLoop.md)**
 
-> 最新课程：第 5 课。点击标题即可直接阅读，公式由 GitHub 原生渲染。
+> 最新课程：第 6 课。点击标题即可直接阅读，公式由 GitHub 原生渲染。
