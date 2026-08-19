@@ -1,4 +1,4 @@
-# Build An Agent From Scratch [2.5]：基础堆量的工作（知识版）
+# Build An Agent From Scratch [2.5]：基础堆量的工作
 
 > 从“能跑”到“能干活”：Agent 能力边界的第一次扩展
 > 原文：[Build An Agent From Scratch [2.5]：基础堆量的工作](https://www.tritium.work/2026/06/09/Build%20An%20Agent%20From%20Scratch%20%5B2.5%5D%EF%BC%9A%E5%9F%BA%E7%A1%80%E5%A0%86%E9%87%8F%E7%9A%84%E5%B7%A5%E4%BD%9C/)
