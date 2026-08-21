@@ -1,7 +1,7 @@
-# Build An Agent From Scratch [2.5]：基础堆量的工作
+# Build An Agent From Scratch [2.5]：基础堆量的工作（知识版）
 
 > 从“能跑”到“能干活”：Agent 能力边界的第一次扩展
-> 原文：[Build An Agent From Scratch [2.5]：基础堆量的工作](https://www.tritium.work/2026/06/09/Build%20An%20Agent%20From%20Scratch%20%5B2.5%5D%EF%BC%9A%E5%9F%BA%E7%A1%80%E5%A0%86%E9%87%8F%E7%9A%84%E5%B7%A5%E4%BD%9C/)
+> 原文：[Build An Agent From Scratch 2.5：基础堆量的工作](https://www.tritium.work/2026/06/09/Build%20An%20Agent%20From%20Scratch%20%5B2.5%5D%EF%BC%9A%E5%9F%BA%E7%A1%80%E5%A0%86%E9%87%8F%E7%9A%84%E5%B7%A5%E4%BD%9C/)
 > 发布于 2026-06-09，更新于 2026-06-11
 
 ## 这一章在讲什么
@@ -39,7 +39,11 @@
 
 四个要素必须放在一起看。只加工具不加护栏，Agent 会变成危险品；只换模型不换工具，能力没有实质提升；工具和模型都到位了却不考虑上下文预算，复杂任务会在中途失败。关于 Agent 能力边界的所有讨论，都可以回到四个问题：大脑够不够、手够不够、护栏有没有、预算撑不撑得住。
 
+下面四条原则，就按这个顺序展开：大脑 → 手 → 护栏 → 预算。每一条都踩在前一条已经成立的基础上；缺了哪一环，后面都垒不上去。
+
 ## 原则一：模型是可替换的组件（大脑）
+
+建造从大脑开始：模型是智能体思考的来源，也是第一个可能被锁死的环节——如果系统只认一家模型服务，后面的一切都悬空。
 
 如果一个系统只认某一家模型服务，供应商涨价、限流、下架、能力落后时，使用者只能被动承受。所以第一条原则是：把模型当作可替换的组件，而不是系统本身。
 
@@ -48,12 +52,11 @@
 ### 统一合同：LlmClient
 
 一个通用的统一接口会长这样：
-
 ```typescript
+
 export interface LlmClient {
   complete(request: LlmRequest): Promise<AssistantMessage>;
 }
-
 export interface StreamingLlmClient extends LlmClient {
   stream(request: LlmRequest): AsyncIterable<LlmStreamEvent>;
 }
@@ -68,8 +71,8 @@ export interface StreamingLlmClient extends LlmClient {
 **Provider 既不在 Agent Loop 里，也不属于工具系统，它和 LlmClient 是同一个边界的两段**——LlmClient 是“合同”，Provider 是“生产合同实现的地方”。
 
 分层看是这样：
-
 ```text
+
 Agent Loop（只认统一合同）
 ├── LlmClient（合同：complete / stream）
 │        ↑ 由谁实现？
@@ -95,6 +98,8 @@ Agent Loop（只认统一合同）
 `openai-responses` 是最常见的默认路径；`openai-chat` 走的是 Chat Completions 接口，任何兼容 OpenAI 格式的服务（包括本地跑的 Ollama 和第三方模型网关）都能接进来；`anthropic` 对应 Claude 系列。这三家对工具调用的表示方式都不一样——同一个动作，A 家写一种格式，B 家写另一种——但 Agent Loop 不需要知道这些差异，它只面对统一的内部消息格式、工具调用格式和流式事件格式。这正是合同的用处：把差异挡在门外。
 
 ## 原则二：工具决定能力，也决定风险（手）
+
+大脑有了退路，接下来要给它装上能干活的手：模型再聪明，能力也要靠工具落地；而工具在给能力的同时，也把风险一起带进门。
 
 Agent 能做什么，由暴露给它的工具集（Toolset）决定。工具按需组合，能多能少，能力边界在启动那一刻显式定死，而不是运行中偷偷变化。这里有三类工具，每类都有自己的知识要点。
 
@@ -134,16 +139,14 @@ Agent 能做什么，由暴露给它的工具集（Toolset）决定。工具按�
 | tail truncation | 命令失败时保留末尾更有价值的错误信息 |
 
 超时是“安全阀”，防止一条命令把整个 Agent 卡死；stdout 和 stderr 分开，是把“正常结果”和“错误信息”分到两个抽屉，模型看得更清楚；退出码（exit code）相当于命令的“健康评分”，非零就说明出错了；tail 截断则利用了错误日志的规律——最有价值的信息通常在最后几行。命令失败后，模型看到的不是“程序崩了”，而是一张体检报告，比如：
-
 ```text
+
 Exit code: 3
 Timed out: false
 Aborted: false
 Wall time: 0.1 seconds
-
 [stdout]
 (empty)
-
 [stderr]
 bad
 ```
@@ -163,8 +166,8 @@ bad
 `fetch_url` 负责获取某个 URL 的文本内容。抓取时先用一个解析 HTML 的工具去掉脚本和样式，只保留正文，然后做 head 截断。这相当于“去广告模式”：网页里有大量导航、脚本、样式噪声，Agent 真正需要的是正文本身。抓取和搜索分离后，搜索负责指路，抓取负责阅读，每一步的输出都是可控的。
 
 当所有工具都打开后，一次典型的长任务会让 Agent 连续经历这样的链路：
-
 ```text
+
 read_file
   -> web_search
   -> fetch_url
@@ -175,6 +178,8 @@ read_file
 也就是从“调用一个工具”变成“完成一条多工具任务链”。任务链越长，每一步产生的信息都会进入历史，上下文压力也随之而来——这正是后面护栏和预算要解决的问题。
 
 ## 原则三：失败是信息，权限先于开放（护栏）
+
+手伸得越远，风险跟得越紧。工具开始读写文件、执行命令、访问网络之后，两个问题立刻摆上台面：失败了怎么办，不该做的事能不能做。这就是护栏要回答的问题。
 
 整篇文章里最容易被忽略、却最影响体验的一点，是把失败当成一等公民来设计。这里说的护栏有两半：一半是“失败怎么处理”，另一半是“权限怎么控制”。它们共同决定了 Agent 能力开放之后，系统还安不安全、可不可信。
 
@@ -200,6 +205,8 @@ read_file
 
 ## 原则四：上下文是预算（预算）
 
+护栏立好之后，还剩最后一个缺口：手每动一步都会产生信息，上下文压力随之而来。所以最后一条原则是预算——上下文是稀缺资源，任务复杂度有上限。
+
 Agent 接触真实世界后，一次任务的信息量会急剧增长：文件内容、命令输出、网页正文都在抢占有限的上下文。所以上下文不是技术参数，而是预算。它决定三个问题：一次任务最多能吃进多复杂的内容？一次任务的上限成本是多少？超限之后用户得到什么体验？这一节把它拆成三块：往哪个方向截、截多长、截完之后怎么继续。
 
 ### 往哪个方向截：truncateHead 与 truncateTail
@@ -220,8 +227,8 @@ Agent 接触真实世界后，一次任务的信息量会急剧增长：文件�
 ### 截完之后怎么继续：offset / limit
 
 截断不是悄悄丢弃，而是明确告诉模型还剩多少、怎么继续。比如读文件时使用 `offset` / `limit`：
-
 ```json
+
 {
   "path": "logs.txt",
   "offset": 200,
@@ -230,8 +237,8 @@ Agent 接触真实世界后，一次任务的信息量会急剧增长：文件�
 ```
 
 这相当于说“翻到日志的第 200 行，从那里开始读 80 行”。如果内容被截断，模型会收到这样一张便条：
-
 ```text
+
 [Truncated: showing lines 2-4 of 5; 13B/23B selected bytes. Use offset=4 to continue.]
 ```
 
@@ -241,6 +248,8 @@ Agent 接触真实世界后，一次任务的信息量会急剧增长：文件�
 
 ## 三个关键认识
 
+四条原则垒完了，把这一章收束成三个可以带走的认识。
+
 第一，能力扩展必然带来上下文压力。工具越多、任务链越长，信息量增长越快，预算问题会提前暴露。所以设计复杂 Agent 功能的第一天，就要为上下文预算留位置。
 
 第二，失败处理是体验设计，不是内部事务。失败怎么被记录、怎么被看见、怎么被用户感知，直接塑造信任。把失败流程当作一条用户路径来设计，是 AI 产品和传统软件的重要区别。
@@ -249,7 +258,7 @@ Agent 接触真实世界后，一次任务的信息量会急剧增长：文件�
 
 ## 一组可以带走的问题
 
-以后见到任何“让 Agent 干活”的系统，可以用这组问题检验：
+认识是给自己看的，清单是拿去用的。以后见到任何“让 Agent 干活”的系统，可以用这组问题检验：
 
 - 它需要哪些工具？最小工具集是什么？
 - 每个工具的风险等级如何？有没有白名单、审批或沙箱？
@@ -260,13 +269,15 @@ Agent 接触真实世界后，一次任务的信息量会急剧增长：文件�
 
 ## 两个真实案例：Codex 和 Pi
 
+清单问的是“有没有”，案例看的是“长什么样”。
+
 文章作者在动手前拆解了两个真实产品：OpenAI 的 Codex 和轻量框架 Pi。它们不是知识本身，而是知识最好的例证——前面讲的每个原则，都能在它们身上看到具体模样。
 
 ### Codex：模型供应商是资料卡，工具是受治理的运行时
 
 Codex 用一张“供应商资料卡”描述一家模型服务：除了服务地址和密钥位置，还包括接口格式、请求重试次数、流式输出重试次数、输出卡住多久算超时、要不要附带额外请求头、用什么方式鉴权、是否支持特殊云通道、是否支持实时双向连接。
-
 ```text
+
 wire_api
 request_max_retries
 stream_max_retries
@@ -285,14 +296,12 @@ Codex 的工具系统则示范了“治理”：工具不止有名字和执行�
 ### Pi：模型用“登记簿”管理，工具都装“安全带”
 
 Pi 管理模型的方式是一张登记簿：
-
 ```typescript
-const apiProviderRegistry = new Map<string, ApiProvider>();
 
+const apiProviderRegistry = new Map<string, ApiProvider>();
 export function registerApiProvider(provider: ApiProvider): void {
   apiProviderRegistry.set(provider.api, provider);
 }
-
 export function getApiProvider(api: Api): ApiProvider | undefined {
   return apiProviderRegistry.get(api);
 }

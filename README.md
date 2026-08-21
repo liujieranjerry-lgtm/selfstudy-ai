@@ -9,9 +9,11 @@
 3. [为什么人工智能不能只靠自己完成自我迭代](./03-为什么人工智能不能只靠自己完成自我迭代.md)
 4. [Agent 的能力边界：它为什么能做和为什么不能做](./04-Agent的能力边界.md)
 5. **[Build An Agent From Scratch [1]：Harness 理论框架](./05-Build-An-Agent-From-Scratch-1-Harness理论框架.md)**
-6. **[Build An Agent From Scratch [2]：最小 Agent Loop](./06-Build-An-Agent-From-Scratch-2-最小AgentLoop.md)**
+6. **[Build An Agent From Scratch [2]：最小 Agent Loop（知识版）](./06-Build-An-Agent-From-Scratch-2-最小AgentLoop.md)**
 7. **[Build An Agent From Scratch [2.5]：基础堆量的工作（知识版）](./07-Build-An-Agent-From-Scratch-2.5-基础堆量的工作（知识版）.md)**
 8. **[Build An Agent From Scratch [3]：构建上下文引擎（知识版）](./08-Build-An-Agent-From-Scratch-3-构建上下文引擎（知识版）.md)**
 9. **[Build An Agent From Scratch：让 Agent 有记忆（知识版）](./09-Build-An-Agent-From-Scratch-4-让Agent有记忆（知识版）.md)**
+10. **[Build An Agent From Scratch：先计划再行动（知识版）](./10-Build-An-Agent-From-Scratch-5-先计划再行动（知识版）.md)**
+11. **[Build An Agent From Scratch：与时代接轨（知识版）](./11-Build-An-Agent-From-Scratch-5.3-与时代接轨（知识版）.md)**
 
-> 最新课程：第 9 课。点击标题即可直接阅读，公式由 GitHub 原生渲染。
+> 最新课程：第 11 课。点击标题即可直接阅读，公式由 GitHub 原生渲染。
